@@ -18,4 +18,5 @@ class UserResponse(BaseSchema):
     email: EmailStr
     role: UserRole
     is_active: bool
+    organization_id: uuid.UUID | None
     created_at: datetime
