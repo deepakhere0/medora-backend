@@ -81,6 +81,13 @@ async def approve_organization(
     return organization
 
 
+async def get_pending_organizations(db: AsyncSession) -> list[Organization]:
+    result = await db.execute(
+        select(Organization).where(Organization.is_approved == False)  # noqa: E712
+    )
+    return list(result.scalars().all())
+
+
 async def get_all_organizations(db: AsyncSession) -> list[Organization]:
     result = await db.execute(select(Organization))
     return list(result.scalars().all())

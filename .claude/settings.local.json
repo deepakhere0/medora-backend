@@ -5,7 +5,8 @@
       "Bash(python:*)",
       "Bash(source:*)",
       "Bash(.venv/Scripts/alembic revision:*)",
-      "Bash(.venv/Scripts/alembic upgrade:*)"
+      "Bash(.venv/Scripts/alembic upgrade:*)",
+      "Bash(.venv/Scripts/uvicorn app.main:app:*)"
     ]
   }
 }
