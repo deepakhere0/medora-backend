@@ -76,6 +76,20 @@ async def approve_organization(
         )
 
     organization.is_approved = True
+
+    result = await db.execute(
+        select(User).where(User.id == organization.created_by)
+    )
+    user = result.scalar_one_or_none()
+
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Organization creator user not found",
+        )
+
+    user.organization_id = organization.id
+
     await db.commit()
     await db.refresh(organization)
     return organization

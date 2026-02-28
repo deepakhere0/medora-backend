@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     DEBUG: bool = False
 
     DATABASE_URL: str
+    DIRECT_URL: str | None = None
 
     SECRET_KEY: str
     ALGORITHM: str = "HS256"

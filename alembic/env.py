@@ -3,6 +3,7 @@ from logging.config import fileConfig
 
 from alembic import context
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.pool import NullPool
 
 from app.core.config import settings
 from app.db.base import Base
@@ -39,7 +40,8 @@ def do_run_migrations(connection):
 
 
 async def run_migrations_online() -> None:
-    engine = create_async_engine(settings.DATABASE_URL)
+    url = settings.DIRECT_URL or settings.DATABASE_URL
+    engine = create_async_engine(url, poolclass=NullPool)
     async with engine.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await engine.dispose()
