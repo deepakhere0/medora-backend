@@ -11,7 +11,9 @@
       "Bash(.venv/Scripts/pip list:*)",
       "Bash(nslookup:*)",
       "Bash(taskkill:*)",
-      "Bash(.venv/Scripts/python:*)"
+      "Bash(.venv/Scripts/python:*)",
+      "Bash(rm:*)",
+      "Bash(.venv/Scripts/pip install:*)"
     ]
   }
 }

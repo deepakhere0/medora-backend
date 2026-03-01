@@ -5,7 +5,7 @@ from app.core.dependencies import get_current_user
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.user import UserCreate, UserResponse
+from app.schemas.user import UserCreate, UserResponse, LoginRequest
 from app.services.auth_service import authenticate_user, register_user
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
@@ -29,7 +29,7 @@ async def register(
 
 @router.post("/login")
 async def login(
-    user_create: UserCreate,
+    user_create: LoginRequest,
     db: AsyncSession = Depends(get_db),
 ):
     user = await authenticate_user(db, user_create.email, user_create.password)

@@ -29,4 +29,4 @@ class User(BaseModel):
         UUID(as_uuid=True), ForeignKey("organizations.id"), nullable=True, index=True
     )
 
-    organization = relationship("Organization", back_populates="users")
+    organization = relationship("Organization", back_populates="users", foreign_keys="User.organization_id")

@@ -14,8 +14,9 @@ class Organization(BaseModel):
     city: Mapped[str] = mapped_column(String, nullable=False)
     state: Mapped[str] = mapped_column(String, nullable=False)
     is_approved: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_by: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id"), nullable=False
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
 
-    users = relationship("User", back_populates="organization")
+    users = relationship("User", back_populates="organization", foreign_keys="User.organization_id")
+    doctors = relationship("Doctor", back_populates="organization")
