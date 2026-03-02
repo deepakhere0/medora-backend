@@ -1,61 +1,105 @@
-"""
-Appointment is the central scheduling entity in MEDORA.
-Every clinical interaction between a doctor and a patient is recorded
-here, scoped to a tenant (organization). It drives scheduling,
-analytics, billing triggers, and audit trails across the platform.
-"""
-
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, time
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Index, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, String, Text, Time
+from sqlalchemy.dialects.postgresql import ENUM as PgENUM, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base, TimestampMixin, TenantMixin, UUIDPrimaryKeyMixin
+from app.db.base import Base
+from app.models.base import TimestampMixin, UUIDPrimaryKeyMixin
 
 
 class AppointmentStatus(str, enum.Enum):
     scheduled = "scheduled"
+    confirmed = "confirmed"
+    in_progress = "in_progress"
     completed = "completed"
     cancelled = "cancelled"
-    no_show = "no_show"
 
 
-class Appointment(UUIDPrimaryKeyMixin, TimestampMixin, TenantMixin, Base):
+class AppointmentType(str, enum.Enum):
+    walk_in = "walk_in"
+    scheduled = "scheduled"
+
+
+appointment_status_enum = PgENUM(
+    "scheduled",
+    "confirmed",
+    "in_progress",
+    "completed",
+    "cancelled",
+    name="appointment_status",
+    create_type=False,
+)
+
+appointment_type_enum = PgENUM(
+    "walk_in",
+    "scheduled",
+    name="appointment_type",
+    create_type=False,
+)
+
+
+class Appointment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
+    """
+    Central scheduling entity in MEDORA.
+    Connects a patient to a doctor at a specific date and time,
+    scoped to a tenant organization.
+    """
+
     __tablename__ = "appointments"
 
     __table_args__ = (
-        Index("ix_appointments_organization_id_scheduled_at", "organization_id", "scheduled_at"),
-        Index("ix_appointments_organization_id_status", "organization_id", "status"),
+        Index("ix_appt_org_date", "organization_id", "appointment_date"),
+        Index("ix_appt_org_doctor_date", "organization_id", "doctor_id", "appointment_date"),
+        Index("ix_appt_org_patient", "organization_id", "patient_id"),
+        Index("ix_appt_org_status", "organization_id", "status"),
+        {},
     )
 
+    organization_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
     doctor_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("doctors.id"),
+        ForeignKey("doctors.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
     patient_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("patients.id"),
+        ForeignKey("patients.id", ondelete="CASCADE"),
         nullable=False,
         index=True,
     )
-    scheduled_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
+    appointment_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    start_time: Mapped[time] = mapped_column(Time, nullable=False)
+    end_time: Mapped[time] = mapped_column(Time, nullable=False)
+    appointment_type: Mapped[str] = mapped_column(
+        appointment_type_enum,
         nullable=False,
-        index=True,
+        server_default="scheduled",
     )
-    status: Mapped[AppointmentStatus] = mapped_column(
-        Enum(AppointmentStatus, name="appointmentstatus", create_type=True),
+    status: Mapped[str] = mapped_column(
+        appointment_status_enum,
         nullable=False,
-        default=AppointmentStatus.scheduled,
-        index=True,
+        server_default="scheduled",
     )
-    cancellation_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancellation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    token_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
-    doctor = relationship("Doctor", back_populates="appointments")
-    patient = relationship("Patient", back_populates="appointments")
+    organization: Mapped["Organization"] = relationship(
+        "Organization", back_populates="appointments", lazy="noload"
+    )
+    doctor: Mapped["Doctor"] = relationship(
+        "Doctor", back_populates="appointments", lazy="noload"
+    )
+    patient: Mapped["Patient"] = relationship(
+        "Patient", back_populates="appointments", lazy="noload"
+    )

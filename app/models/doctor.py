@@ -100,3 +100,4 @@ class Doctor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     organization = relationship("Organization", back_populates="doctors")
+    appointments = relationship("Appointment", back_populates="doctor", lazy="noload")

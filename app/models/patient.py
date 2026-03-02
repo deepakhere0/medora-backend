@@ -20,7 +20,7 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import ENUM, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
@@ -89,3 +89,5 @@ class Patient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     blood_pressure: Mapped[str | None] = mapped_column(String(20), nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+    appointments = relationship("Appointment", back_populates="patient", lazy="noload")
