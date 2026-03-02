@@ -12,6 +12,9 @@ from app.db.base import Base
 import app.models  # noqa: F401
 from app.models.user import User  # noqa: F401
 from app.models.doctor import Doctor  # noqa: F401
+from app.models.patient import Patient  # noqa: F401
+# NOTE: Appointment intentionally NOT imported here — it references patients+doctors
+# and would cause autogenerate to include the appointments table in this migration.
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
