@@ -92,3 +92,4 @@ class Patient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     appointments = relationship("Appointment", back_populates="patient", lazy="noload")
     reports = relationship("Report", back_populates="patient", lazy="noload")
+    medical_histories = relationship("MedicalHistory", back_populates="patient", lazy="noload")

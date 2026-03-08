@@ -22,3 +22,4 @@ class Organization(BaseModel):
     doctors = relationship("Doctor", back_populates="organization")
     appointments = relationship("Appointment", back_populates="organization", lazy="noload")
     reports = relationship("Report", back_populates="organization", lazy="noload")
+    medical_histories = relationship("MedicalHistory", back_populates="organization", lazy="noload")

@@ -4,5 +4,6 @@ from app.models.doctor import Doctor
 from app.models.patient import Patient
 from app.models.appointment import Appointment
 from app.models.report import Report
+from app.models.medical_history import MedicalHistory
 
-__all__ = ["User", "Organization", "Doctor", "Patient", "Appointment", "Report"]
+__all__ = ["User", "Organization", "Doctor", "Patient", "Appointment", "Report", "MedicalHistory"]
