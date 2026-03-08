@@ -5,6 +5,7 @@ from app.core.dependencies import get_current_user
 from app.core.security import create_access_token
 from app.db.session import get_db
 from app.models.user import User
+from app.schemas.auth import LoginResponse
 from app.schemas.user import UserCreate, UserResponse, LoginRequest
 from app.services.auth_service import authenticate_user, register_user
 
@@ -27,11 +28,11 @@ async def register(
     return user
 
 
-@router.post("/login")
+@router.post("/login", response_model=LoginResponse)
 async def login(
     user_create: LoginRequest,
     db: AsyncSession = Depends(get_db),
-):
+) -> LoginResponse:
     user = await authenticate_user(db, user_create.email, user_create.password)
     if user is None:
         raise HTTPException(
@@ -40,7 +41,14 @@ async def login(
             headers={"WWW-Authenticate": "Bearer"},
         )
     access_token = create_access_token(subject=str(user.id), role=user.role.value)
-    return {"access_token": access_token, "token_type": "bearer"}
+    return LoginResponse(
+        access_token=access_token,
+        token_type="bearer",
+        user_id=user.id,
+        email=user.email,
+        role=user.role.value,
+        organization_id=user.organization_id,
+    )
 
 
 @router.get("/me", response_model=UserResponse)
