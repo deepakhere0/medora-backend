@@ -30,3 +30,4 @@ class User(BaseModel):
     )
 
     organization = relationship("Organization", back_populates="users", foreign_keys="User.organization_id")
+    reports = relationship("Report", back_populates="uploader", lazy="noload", foreign_keys="[Report.uploaded_by]")
