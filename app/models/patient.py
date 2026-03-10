@@ -68,19 +68,20 @@ class Patient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_patients_org_is_active", "organization_id", "is_active"),
     )
 
-    organization_id: Mapped[uuid.UUID] = mapped_column(
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     patient_code: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    gender: Mapped[str] = mapped_column(patient_gender_enum, nullable=False)
+    gender: Mapped[str | None] = mapped_column(patient_gender_enum, nullable=True)
     date_of_birth: Mapped[date] = mapped_column(Date, nullable=False)
     blood_type: Mapped[str | None] = mapped_column(patient_blood_type_enum, nullable=True)
     phone: Mapped[str] = mapped_column(String(20), nullable=False)
-    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
+    hashed_password: Mapped[str | None] = mapped_column(String, nullable=True)
     address: Mapped[str | None] = mapped_column(Text, nullable=True)
     emergency_contact_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     emergency_contact_phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -93,3 +94,4 @@ class Patient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     appointments = relationship("Appointment", back_populates="patient", lazy="noload")
     reports = relationship("Report", back_populates="patient", lazy="noload")
     medical_histories = relationship("MedicalHistory", back_populates="patient", lazy="noload")
+    patient_organizations = relationship("PatientOrganization", back_populates="patient", lazy="noload")

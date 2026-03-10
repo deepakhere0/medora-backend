@@ -2,8 +2,10 @@ from app.models.organization import Organization
 from app.models.user import User
 from app.models.doctor import Doctor
 from app.models.patient import Patient
+from app.models.patient_organization import PatientOrganization
+from app.models.otp import OTPRecord
 from app.models.appointment import Appointment
 from app.models.report import Report
 from app.models.medical_history import MedicalHistory
 
-__all__ = ["User", "Organization", "Doctor", "Patient", "Appointment", "Report", "MedicalHistory"]
+__all__ = ["User", "Organization", "Doctor", "Patient", "PatientOrganization", "OTPRecord", "Appointment", "Report", "MedicalHistory"]

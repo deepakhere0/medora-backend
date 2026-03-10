@@ -6,6 +6,7 @@ from app.routers import auth, health
 from app.routers.organization import router as organization_router
 from app.routers.doctor import router as doctor_router
 from app.routers.patient import router as patient_router
+from app.routers.patient_auth import router as patient_auth_router
 from app.routers.appointment import router as appointment_router
 from app.routers.reports import router as reports_router
 from app.routers.dashboard import router as dashboard_router
@@ -43,6 +44,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(doctor_router, prefix="/api/v1")
     app.include_router(patient_router, prefix="/api/v1")
+    app.include_router(patient_auth_router, prefix="/api/v1")
     app.include_router(appointment_router, prefix="/api/v1")
     app.include_router(reports_router, prefix="/api/v1")
     app.include_router(dashboard_router, prefix="/api/v1")

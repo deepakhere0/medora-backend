@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.patient import Patient
 from app.models.user import User, UserRole
 
 bearer_scheme = HTTPBearer()
@@ -50,6 +51,39 @@ async def get_current_user(
         )
 
     return user
+
+
+async def get_current_patient(
+    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    db: AsyncSession = Depends(get_db),
+) -> Patient:
+    exc = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate patient credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        patient_id: str = payload.get("sub")
+        role: str = payload.get("role")
+        if patient_id is None or role != "patient":
+            raise exc
+    except JWTError:
+        raise exc
+
+    try:
+        patient_uuid = uuid.UUID(patient_id)
+    except ValueError:
+        raise exc
+
+    result = await db.execute(select(Patient).where(Patient.id == patient_uuid))
+    patient = result.scalar_one_or_none()
+
+    if patient is None or not patient.is_active:
+        raise exc
+
+    return patient
 
 
 def require_role(required_role: UserRole):
