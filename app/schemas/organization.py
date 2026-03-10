@@ -16,5 +16,5 @@ class OrganizationResponse(BaseSchema):
     city: str
     state: str
     is_approved: bool
-    created_by: uuid.UUID
+    created_by: uuid.UUID | None = None
     created_at: datetime

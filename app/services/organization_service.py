@@ -10,23 +10,8 @@ from app.schemas.organization import OrganizationCreate
 
 
 async def create_organization(
-    db: AsyncSession, current_user: User, org_data: OrganizationCreate
+    db: AsyncSession, current_user: User | None, org_data: OrganizationCreate
 ) -> Organization:
-    if current_user.role != UserRole.org_admin:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only org_admin users can create an organization",
-        )
-
-    result = await db.execute(
-        select(Organization).where(Organization.created_by == current_user.id)
-    )
-    if result.scalar_one_or_none() is not None:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="You have already created an organization",
-        )
-
     result = await db.execute(
         select(Organization).where(Organization.name == org_data.name)
     )
@@ -40,7 +25,7 @@ async def create_organization(
         name=org_data.name,
         city=org_data.city,
         state=org_data.state,
-        created_by=current_user.id,
+        created_by=None,
     )
     db.add(organization)
     await db.commit()
@@ -77,18 +62,13 @@ async def approve_organization(
 
     organization.is_approved = True
 
-    result = await db.execute(
-        select(User).where(User.id == organization.created_by)
-    )
-    user = result.scalar_one_or_none()
-
-    if user is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization creator user not found",
+    if organization.created_by is not None:
+        result = await db.execute(
+            select(User).where(User.id == organization.created_by)
         )
-
-    user.organization_id = organization.id
+        user = result.scalar_one_or_none()
+        if user is not None:
+            user.organization_id = organization.id
 
     await db.commit()
     await db.refresh(organization)

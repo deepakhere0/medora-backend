@@ -19,10 +19,9 @@ router = APIRouter(prefix="/organizations", tags=["Organizations"])
 @router.post("/", response_model=OrganizationResponse, status_code=status.HTTP_201_CREATED)
 async def create_organization_endpoint(
     org_data: OrganizationCreate,
-    current_user: User = Depends(require_role(UserRole.org_admin)),
     db: AsyncSession = Depends(get_db),
 ):
-    return await create_organization(db, current_user, org_data)
+    return await create_organization(db, None, org_data)
 
 
 @router.get("/pending", response_model=list[OrganizationResponse])
