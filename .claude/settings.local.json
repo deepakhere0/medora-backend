@@ -17,7 +17,9 @@
       "Bash(curl:*)",
       "Bash(netstat:*)",
       "Bash(cmd:*)",
-      "Bash(grep -r \"supabase\\\\|auth_user_id\\\\|supabase_uid\" /c/Users/Administrator/Desktop/MEDORA/backend/app --include=\"*.py\" 2>/dev/null | head -20)"
+      "Bash(grep -r \"supabase\\\\|auth_user_id\\\\|supabase_uid\" /c/Users/Administrator/Desktop/MEDORA/backend/app --include=\"*.py\" 2>/dev/null | head -20)",
+      "Bash(powershell -Command \"Get-Process -Id 16852 | Select-Object Id,Name,Path\" 2>&1)",
+      "Bash(powershell -Command \"Stop-Process -Id 16852 -Force\" 2>&1\nsleep 2\nnetstat -ano | grep \":8000 \" | head -3)"
     ]
   }
 }
