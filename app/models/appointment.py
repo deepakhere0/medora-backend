@@ -89,6 +89,7 @@ class Appointment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
         server_default="scheduled",
     )
+    booking_id: Mapped[str | None] = mapped_column(String(20), nullable=True, unique=True, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     cancellation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     token_number: Mapped[int | None] = mapped_column(Integer, nullable=True)

@@ -101,3 +101,4 @@ class Doctor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     organization = relationship("Organization", back_populates="doctors")
     appointments = relationship("Appointment", back_populates="doctor", lazy="noload")
+    schedules = relationship("DoctorSchedule", back_populates="doctor", lazy="noload")

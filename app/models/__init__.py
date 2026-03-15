@@ -7,5 +7,6 @@ from app.models.otp import OTPRecord
 from app.models.appointment import Appointment
 from app.models.report import Report
 from app.models.medical_history import MedicalHistory
+from app.models.doctor_schedule import DoctorSchedule
 
-__all__ = ["User", "Organization", "Doctor", "Patient", "PatientOrganization", "OTPRecord", "Appointment", "Report", "MedicalHistory"]
+__all__ = ["User", "Organization", "Doctor", "Patient", "PatientOrganization", "OTPRecord", "Appointment", "Report", "MedicalHistory", "DoctorSchedule"]
