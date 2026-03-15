@@ -35,10 +35,10 @@ class Report(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         {},
     )
 
-    organization_id: Mapped[UUID] = mapped_column(
+    organization_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     patient_id: Mapped[UUID] = mapped_column(
@@ -53,10 +53,10 @@ class Report(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=True,
         index=True,
     )
-    uploaded_by: Mapped[UUID] = mapped_column(
+    uploaded_by: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
     report_type: Mapped[str] = mapped_column(report_type_enum, nullable=False)

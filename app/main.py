@@ -13,6 +13,7 @@ from app.routers.dashboard import router as dashboard_router
 from app.routers.medical_history import router as medical_history_router
 from app.routers.patient_dashboard import router as patient_dashboard_router
 from app.routers.booking import router as booking_router
+from app.routers.patient_reports import router as patient_reports_router
 
 
 def create_app() -> FastAPI:
@@ -53,6 +54,7 @@ def create_app() -> FastAPI:
     app.include_router(medical_history_router, prefix="/api/v1")
     app.include_router(patient_dashboard_router, prefix="/api/v1")
     app.include_router(booking_router, prefix="/api/v1")
+    app.include_router(patient_reports_router, prefix="/api/v1")
 
     return app
 

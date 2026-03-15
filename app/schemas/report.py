@@ -27,10 +27,10 @@ class ReportRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id:              UUID
-    organization_id: UUID
+    organization_id: UUID | None
     patient_id:      UUID
     appointment_id:  UUID | None
-    uploaded_by:     UUID
+    uploaded_by:     UUID | None
     report_type:     ReportType
     file_name:       str
     file_size_kb:    int
