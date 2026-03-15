@@ -19,7 +19,8 @@
       "Bash(cmd:*)",
       "Bash(grep -r \"supabase\\\\|auth_user_id\\\\|supabase_uid\" /c/Users/Administrator/Desktop/MEDORA/backend/app --include=\"*.py\" 2>/dev/null | head -20)",
       "Bash(powershell -Command \"Get-Process -Id 16852 | Select-Object Id,Name,Path\" 2>&1)",
-      "Bash(powershell -Command \"Stop-Process -Id 16852 -Force\" 2>&1\nsleep 2\nnetstat -ano | grep \":8000 \" | head -3)"
+      "Bash(powershell -Command \"Stop-Process -Id 16852 -Force\" 2>&1\nsleep 2\nnetstat -ano | grep \":8000 \" | head -3)",
+      "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmNzYyZDRjNS01MmIyLTQ2YTctOTBmMS1kYmQxODI4N2RhYzAiLCJyb2xlIjoicGF0aWVudCIsImV4cCI6MTc3MzU3MTcyMH0.ln6ioXhzTWpjmm7JqwPI_zz_ug2wvEpGUKH9BhVzYy8\"\n\necho \"=== DOCTORS ===\"\ncurl -s \"http://127.0.0.1:8000/api/v1/booking/hospitals/d934dafb-0e0f-4a54-b634-cca1d09ff5c2/doctors\" \\\\\n  -H \"Authorization: Bearer $TOKEN\" | python -m json.tool\n\necho \"\"\necho \"=== SLOTS for Dr. Anil Deshmukh \\(week_start=2026-03-16\\) ===\"\ncurl -s \"http://127.0.0.1:8000/api/v1/booking/doctors/cb61a8f1-01ff-4dea-848a-acdc0b2fece2/slots?week_start=2026-03-16\" \\\\\n  -H \"Authorization: Bearer $TOKEN\" | python -m json.tool)"
     ]
   }
 }

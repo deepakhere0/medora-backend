@@ -213,3 +213,34 @@ async def get_patient_appointments(
     ]
 
     return appointments, total
+
+
+async def cancel_patient_appointment(
+    db: AsyncSession,
+    patient_id: UUID,
+    appointment_id: UUID,
+) -> Appointment:
+    result = await db.execute(
+        select(Appointment)
+        .where(Appointment.id == appointment_id)
+        .where(Appointment.patient_id == patient_id)
+        .where(Appointment.is_active == True)
+    )
+    appointment = result.scalar_one_or_none()
+
+    if appointment is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Appointment not found",
+        )
+
+    if appointment.status not in ("scheduled", "confirmed"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot cancel an appointment with status '{appointment.status}'",
+        )
+
+    appointment.status = "cancelled"
+    await db.commit()
+    await db.refresh(appointment)
+    return appointment

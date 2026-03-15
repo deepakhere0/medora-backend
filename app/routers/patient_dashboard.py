@@ -1,3 +1,5 @@
+from uuid import UUID
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +13,7 @@ from app.schemas.patient_dashboard import (
     PatientProfileUpdate,
 )
 from app.services.patient_dashboard_service import (
+    cancel_patient_appointment,
     get_patient_appointments,
     get_patient_dashboard,
     get_patient_profile,
@@ -64,3 +67,13 @@ async def patient_appointments(
         limit=limit,
     )
     return {"appointments": appointments, "total": total}
+
+
+@router.patch("/appointments/{appointment_id}/cancel")
+async def cancel_appointment(
+    appointment_id: UUID,
+    current_patient: Patient = Depends(get_current_patient),
+    db: AsyncSession = Depends(get_db),
+):
+    appointment = await cancel_patient_appointment(db, current_patient.id, appointment_id)
+    return {"message": "Appointment cancelled", "id": appointment.id}
