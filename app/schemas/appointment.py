@@ -5,6 +5,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 from typing import Annotated, Optional
 
+from app.schemas.patient import PatientGender, PatientBloodType
+
 
 class AppointmentStatus(str, enum.Enum):
     scheduled = "scheduled"
@@ -138,3 +140,59 @@ class AppointmentStatsResponse(BaseModel):
     in_progress_count: int
     completed_count: int
     cancelled_count: int
+
+
+class WalkInAppointmentRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Patient fields
+    patient_name:          Annotated[str, Field(min_length=1, max_length=255)]
+    patient_gender:        PatientGender
+    patient_phone:         Annotated[str, Field(min_length=5, max_length=20)]
+    patient_email:         str | None = None
+    patient_date_of_birth: date | None = None
+    patient_address:       str | None = None
+    patient_blood_type:    PatientBloodType | None = None
+
+    # Appointment fields
+    doctor_id:        UUID
+    appointment_date: date
+    start_time:       time
+    end_time:         time
+    notes:            str | None = None
+
+    @field_validator("patient_name", mode="before")
+    @classmethod
+    def strip_patient_name(cls, v: object) -> object:
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                raise ValueError("patient_name must not be empty")
+        return v
+
+    @field_validator("appointment_date")
+    @classmethod
+    def date_not_in_past(cls, v: date) -> date:
+        if v < date.today():
+            raise ValueError("appointment_date cannot be in the past")
+        return v
+
+    @model_validator(mode="after")
+    def end_after_start(self) -> "WalkInAppointmentRequest":
+        if self.end_time <= self.start_time:
+            raise ValueError("end_time must be after start_time")
+        return self
+
+
+class WalkInAppointmentResponse(BaseModel):
+    appointment_id:   UUID
+    booking_id:       str | None
+    patient_id:       UUID
+    patient_code:     str
+    patient_name:     str
+    doctor_name:      str
+    appointment_date: date
+    start_time:       str
+    end_time:         str
+    status:           str
+    message:          str

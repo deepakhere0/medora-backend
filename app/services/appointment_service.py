@@ -1,3 +1,5 @@
+import random
+import string
 from datetime import date, time
 from uuid import UUID
 
@@ -14,6 +16,8 @@ from app.schemas.appointment import (
     AppointmentStatusUpdate,
     AppointmentStatsResponse,
     AppointmentUpdate,
+    WalkInAppointmentRequest,
+    WalkInAppointmentResponse,
 )
 
 
@@ -278,6 +282,132 @@ async def cancel_appointment(
     appointment.is_active = False
 
     await db.commit()
+
+
+def _generate_booking_id() -> str:
+    """Return a booking ID in MED-XXXX-XXXX format (uppercase alphanum)."""
+    chars = string.ascii_uppercase + string.digits
+    part1 = "".join(random.choices(chars, k=4))
+    part2 = "".join(random.choices(chars, k=4))
+    return f"MED-{part1}-{part2}"
+
+
+async def create_walkin_appointment(
+    db: AsyncSession,
+    org_id: UUID,
+    data: WalkInAppointmentRequest,
+) -> WalkInAppointmentResponse:
+    # 1. Look up patient by phone within this org
+    patient_row = await db.execute(
+        select(Patient).where(
+            Patient.organization_id == org_id,
+            Patient.phone == data.patient_phone,
+            Patient.is_active.is_(True),
+        )
+    )
+    patient = patient_row.scalar_one_or_none()
+    is_new_patient = patient is None
+
+    if is_new_patient:
+        if data.patient_date_of_birth is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="patient_date_of_birth is required when registering a new patient",
+            )
+        # Generate next patient_code for this org (counts all, including soft-deleted)
+        code_count = await db.scalar(
+            select(func.count()).select_from(Patient).where(Patient.organization_id == org_id)
+        ) or 0
+        patient_code = f"PID-{code_count + 1:04d}"
+
+        patient = Patient(
+            organization_id=org_id,
+            patient_code=patient_code,
+            name=data.patient_name,
+            gender=data.patient_gender.value,
+            phone=data.patient_phone,
+            email=data.patient_email,
+            date_of_birth=data.patient_date_of_birth,
+            address=data.patient_address,
+            blood_type=data.patient_blood_type.value if data.patient_blood_type else None,
+        )
+        db.add(patient)
+        # UUID is Python-generated; patient.id is ready to use immediately
+
+    # 2. Validate doctor exists and belongs to org
+    doctor_row = await db.execute(
+        select(Doctor).where(
+            Doctor.id == data.doctor_id,
+            Doctor.organization_id == org_id,
+            Doctor.is_active.is_(True),
+        )
+    )
+    doctor = doctor_row.scalar_one_or_none()
+    if doctor is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor not found",
+        )
+
+    # 3. Check for doctor time conflicts
+    await _check_doctor_conflict(
+        db=db,
+        org_id=org_id,
+        doctor_id=data.doctor_id,
+        appointment_date=data.appointment_date,
+        start_time=data.start_time,
+        end_time=data.end_time,
+    )
+
+    # 4. Calculate walk-in token number for this date
+    token_count = await db.scalar(
+        select(func.count(Appointment.id)).where(
+            Appointment.organization_id == org_id,
+            Appointment.appointment_date == data.appointment_date,
+            Appointment.appointment_type == "walk_in",
+            Appointment.status != AppointmentStatus.cancelled,
+        )
+    ) or 0
+    token_number = token_count + 1
+
+    # 5. Create appointment (same session — single commit covers both)
+    appointment = Appointment(
+        organization_id=org_id,
+        doctor_id=data.doctor_id,
+        patient_id=patient.id,
+        appointment_date=data.appointment_date,
+        start_time=data.start_time,
+        end_time=data.end_time,
+        appointment_type="walk_in",
+        status=AppointmentStatus.scheduled,
+        token_number=token_number,
+        booking_id=_generate_booking_id(),
+        notes=data.notes,
+    )
+    db.add(appointment)
+
+    # Single commit: atomically persists patient (if new) + appointment
+    await db.commit()
+    await db.refresh(appointment)
+    await db.refresh(patient)
+
+    return WalkInAppointmentResponse(
+        appointment_id=appointment.id,
+        booking_id=appointment.booking_id,
+        patient_id=patient.id,
+        patient_code=patient.patient_code,
+        patient_name=patient.name,
+        doctor_name=doctor.name,
+        appointment_date=appointment.appointment_date,
+        start_time=appointment.start_time.strftime("%H:%M"),
+        end_time=appointment.end_time.strftime("%H:%M"),
+        status=appointment.status,
+        message=(
+            "Walk-in appointment created for new patient"
+            if is_new_patient
+            else "Walk-in appointment created for existing patient"
+        ),
+    )
 
 
 async def get_appointment_stats(

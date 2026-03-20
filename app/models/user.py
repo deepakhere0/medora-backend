@@ -21,6 +21,8 @@ class User(BaseModel):
         String, unique=True, index=True, nullable=False
     )
     hashed_password: Mapped[str] = mapped_column(String, nullable=False)
+    name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    phone: Mapped[str | None] = mapped_column(String(20), nullable=True)
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="userrole"), nullable=False
     )

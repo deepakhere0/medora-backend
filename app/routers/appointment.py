@@ -16,10 +16,13 @@ from app.schemas.appointment import (
     AppointmentStatusUpdate,
     AppointmentStatsResponse,
     AppointmentUpdate,
+    WalkInAppointmentRequest,
+    WalkInAppointmentResponse,
 )
 from app.services.appointment_service import (
     cancel_appointment,
     create_appointment,
+    create_walkin_appointment,
     get_appointment,
     get_appointment_stats,
     list_appointments,
@@ -96,6 +99,20 @@ async def get_appointment_endpoint(
 ) -> AppointmentRead:
     org_id = _get_org_id(current_user)
     return await get_appointment(db, appointment_id, org_id)
+
+
+@router.post(
+    "/walk-in",
+    response_model=WalkInAppointmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_walkin_appointment_endpoint(
+    data: WalkInAppointmentRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.org_admin)),
+) -> WalkInAppointmentResponse:
+    org_id = _get_org_id(current_user)
+    return await create_walkin_appointment(db, org_id, data)
 
 
 @router.post(
