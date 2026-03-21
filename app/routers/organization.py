@@ -9,6 +9,8 @@ from app.db.session import get_db
 from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.schemas.organization import (
+    HospitalRegistrationRequest,
+    HospitalRegistrationResponse,
     OrganizationCreate,
     OrganizationDetailResponse,
     OrganizationResponse,
@@ -18,9 +20,22 @@ from app.services.organization_service import (
     approve_organization,
     create_organization,
     get_pending_organizations,
+    register_hospital,
 )
 
 router = APIRouter(prefix="/organizations", tags=["Organizations"])
+
+
+@router.post(
+    "/register",
+    response_model=HospitalRegistrationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def register_hospital_endpoint(
+    data: HospitalRegistrationRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    return await register_hospital(db, data)
 
 
 @router.post("/", response_model=OrganizationResponse, status_code=status.HTTP_201_CREATED)

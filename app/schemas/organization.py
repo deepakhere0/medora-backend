@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr
 
 from app.schemas.base import BaseSchema
 
@@ -44,3 +44,28 @@ class OrganizationDetailResponse(BaseSchema):
     logo_url: str | None
     is_approved: bool
     created_at: datetime
+
+
+class HospitalRegistrationRequest(BaseModel):
+    # Organization details
+    org_name: str
+    org_city: str
+    org_state: str
+    org_address: str | None = None
+    org_phone: str | None = None
+    org_email: str | None = None
+
+    # Admin user details
+    admin_email: EmailStr
+    admin_password: str
+    admin_name: str | None = None
+    admin_phone: str | None = None
+
+
+class HospitalRegistrationResponse(BaseModel):
+    organization_id: uuid.UUID
+    organization_name: str
+    user_id: uuid.UUID
+    user_email: str
+    is_approved: bool
+    message: str
