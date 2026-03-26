@@ -22,7 +22,9 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_KEY: str
     SUPABASE_BUCKET: str = "medical-reports"
-    
+
+    ANTHROPIC_API_KEY: str = ""
+
 
 
 settings = Settings()

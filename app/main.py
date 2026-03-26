@@ -15,6 +15,7 @@ from app.routers.patient_dashboard import router as patient_dashboard_router
 from app.routers.booking import router as booking_router
 from app.routers.patient_reports import router as patient_reports_router
 from app.routers.admin import router as admin_router
+from app.routers.ai import router as ai_router
 
 
 def create_app() -> FastAPI:
@@ -57,6 +58,7 @@ def create_app() -> FastAPI:
     app.include_router(booking_router, prefix="/api/v1")
     app.include_router(patient_reports_router, prefix="/api/v1")
     app.include_router(admin_router, prefix="/api/v1")
+    app.include_router(ai_router, prefix="/api/v1")
 
     return app
 
