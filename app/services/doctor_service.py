@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.doctor import Doctor
+from app.models.doctor_schedule import DoctorSchedule
 from app.schemas.doctor import (
     DoctorCreate,
     DoctorStatus,
@@ -13,6 +14,13 @@ from app.schemas.doctor import (
     DoctorStatsResponse,
     DoctorUpdate,
 )
+
+_DEFAULT_SCHEDULE_DAYS = range(5)  # Monday–Friday
+_DEFAULT_START = time(9, 0)
+_DEFAULT_END = time(17, 0)
+_DEFAULT_SLOT_MINUTES = 30
+_DEFAULT_BREAK_START = time(13, 0)
+_DEFAULT_BREAK_END = time(14, 0)
 
 
 async def create_doctor(
@@ -38,6 +46,21 @@ async def create_doctor(
         **data.model_dump(),
     )
     db.add(doctor)
+    await db.flush()  # populate doctor.id before creating schedules
+
+    for dow in _DEFAULT_SCHEDULE_DAYS:
+        db.add(DoctorSchedule(
+            doctor_id=doctor.id,
+            organization_id=org_id,
+            day_of_week=dow,
+            start_time=_DEFAULT_START,
+            end_time=_DEFAULT_END,
+            slot_duration_minutes=_DEFAULT_SLOT_MINUTES,
+            break_start=_DEFAULT_BREAK_START,
+            break_end=_DEFAULT_BREAK_END,
+            is_active=True,
+        ))
+
     await db.commit()
     await db.refresh(doctor)
     return doctor

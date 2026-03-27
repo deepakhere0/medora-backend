@@ -1,11 +1,14 @@
+from datetime import time
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import require_role
 from app.db.session import get_db
+from app.models.doctor_schedule import DoctorSchedule
 from app.models.user import User, UserRole
 from app.schemas.doctor import (
     DoctorCreate,
@@ -120,3 +123,96 @@ async def delete_doctor_endpoint(
     org_id = _get_org_id(current_user)
     await delete_doctor(db, doctor_id, org_id)
     return {"message": "Doctor deactivated successfully"}
+
+
+# ---------------------------------------------------------------------------
+# Schedule management
+# ---------------------------------------------------------------------------
+
+class ScheduleRead(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    doctor_id: UUID
+    day_of_week: int
+    start_time: time
+    end_time: time
+    slot_duration_minutes: int
+    break_start: time | None
+    break_end: time | None
+    is_active: bool
+
+
+class ScheduleCreate(BaseModel):
+    day_of_week: int          # 0=Monday … 6=Sunday
+    start_time: time
+    end_time: time
+    slot_duration_minutes: int = 30
+    break_start: time | None = None
+    break_end: time | None = None
+
+
+@router.get(
+    "/{doctor_id}/schedules",
+    response_model=list[ScheduleRead],
+    status_code=status.HTTP_200_OK,
+)
+async def list_schedules(
+    doctor_id: UUID,
+    current_user: User = Depends(require_role(UserRole.org_admin)),
+    db: AsyncSession = Depends(get_db),
+) -> list[ScheduleRead]:
+    org_id = _get_org_id(current_user)
+    # Verify doctor belongs to this org
+    await get_doctor(db, doctor_id, org_id)
+
+    result = await db.execute(
+        select(DoctorSchedule)
+        .where(DoctorSchedule.doctor_id == doctor_id)
+        .order_by(DoctorSchedule.day_of_week)
+    )
+    return result.scalars().all()
+
+
+@router.post(
+    "/{doctor_id}/schedules",
+    response_model=ScheduleRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_schedule(
+    doctor_id: UUID,
+    data: ScheduleCreate,
+    current_user: User = Depends(require_role(UserRole.org_admin)),
+    db: AsyncSession = Depends(get_db),
+) -> ScheduleRead:
+    org_id = _get_org_id(current_user)
+    # Verify doctor belongs to this org
+    await get_doctor(db, doctor_id, org_id)
+
+    # Check for duplicate day
+    existing = await db.execute(
+        select(DoctorSchedule)
+        .where(DoctorSchedule.doctor_id == doctor_id)
+        .where(DoctorSchedule.day_of_week == data.day_of_week)
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A schedule for this day already exists. Delete it first or update it.",
+        )
+
+    schedule = DoctorSchedule(
+        doctor_id=doctor_id,
+        organization_id=org_id,
+        day_of_week=data.day_of_week,
+        start_time=data.start_time,
+        end_time=data.end_time,
+        slot_duration_minutes=data.slot_duration_minutes,
+        break_start=data.break_start,
+        break_end=data.break_end,
+        is_active=True,
+    )
+    db.add(schedule)
+    await db.commit()
+    await db.refresh(schedule)
+    return schedule

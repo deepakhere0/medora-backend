@@ -20,6 +20,9 @@ def _build_appointment_brief(appt: Appointment, doctor: Doctor, org: Organizatio
         "doctor_specialty": doctor.specialization,
         "doctor_photo_url": doctor.photo_url,
         "organization_name": org.name,
+        "hospital_address": org.address,
+        "hospital_city": org.city,
+        "hospital_state": org.state,
         "appointment_date": appt.appointment_date,
         "start_time": appt.start_time,
         "end_time": appt.end_time,
@@ -96,6 +99,7 @@ async def get_patient_dashboard(db: AsyncSession, patient_id: UUID) -> dict:
             "height_cm": patient.height_cm,
             "weight_kg": patient.weight_kg,
             "blood_pressure": patient.blood_pressure,
+            "heart_rate": patient.heart_rate,
             "photo_url": patient.photo_url,
             "organizations": [{"id": o.id, "name": o.name} for o in orgs],
         },
@@ -125,6 +129,7 @@ async def get_patient_profile(db: AsyncSession, patient_id: UUID) -> dict:
         "height_cm": patient.height_cm,
         "weight_kg": patient.weight_kg,
         "blood_pressure": patient.blood_pressure,
+        "heart_rate": patient.heart_rate,
         "photo_url": patient.photo_url,
         "organizations": [{"id": o.id, "name": o.name} for o in orgs],
     }
@@ -157,6 +162,7 @@ async def update_patient_profile(db: AsyncSession, patient_id: UUID, updates: di
         "height_cm": patient.height_cm,
         "weight_kg": patient.weight_kg,
         "blood_pressure": patient.blood_pressure,
+        "heart_rate": patient.heart_rate,
         "photo_url": patient.photo_url,
         "organizations": [{"id": o.id, "name": o.name} for o in orgs],
     }

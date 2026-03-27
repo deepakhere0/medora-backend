@@ -25,6 +25,7 @@ class PatientProfile(BaseModel):
     height_cm: float | None
     weight_kg: float | None
     blood_pressure: str | None
+    heart_rate: int | None = None
     photo_url: str | None
     organizations: list[PatientOrgBrief]
 
@@ -34,9 +35,11 @@ class PatientProfileUpdate(BaseModel):
     address: str | None = None
     emergency_contact_name: str | None = None
     emergency_contact_phone: str | None = None
+    blood_type: str | None = None
     height_cm: float | None = None
     weight_kg: float | None = None
     blood_pressure: str | None = None
+    heart_rate: int | None = None
 
 
 class PatientAppointmentBrief(BaseModel):
@@ -47,6 +50,9 @@ class PatientAppointmentBrief(BaseModel):
     doctor_specialty: str | None
     doctor_photo_url: str | None
     organization_name: str
+    hospital_address: str | None
+    hospital_city: str | None
+    hospital_state: str | None
     appointment_date: date
     start_time: time
     end_time: time | None

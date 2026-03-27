@@ -15,6 +15,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Index,
+    Integer,
     String,
     Text,
     UniqueConstraint,
@@ -78,7 +79,7 @@ class Patient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     gender: Mapped[str | None] = mapped_column(patient_gender_enum, nullable=True)
     date_of_birth: Mapped[date] = mapped_column(Date, nullable=False)
-    blood_type: Mapped[str | None] = mapped_column(patient_blood_type_enum, nullable=True)
+    blood_type: Mapped[str | None] = mapped_column(String(10), nullable=True)
     phone: Mapped[str] = mapped_column(String(20), nullable=False)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True, unique=True)
     hashed_password: Mapped[str | None] = mapped_column(String, nullable=True)
@@ -88,6 +89,7 @@ class Patient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     height_cm: Mapped[float | None] = mapped_column(Float, nullable=True)
     weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     blood_pressure: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    heart_rate: Mapped[int | None] = mapped_column(Integer, nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 

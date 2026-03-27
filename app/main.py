@@ -1,8 +1,69 @@
+import logging
+from contextlib import asynccontextmanager
+from datetime import time
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import func, select
 
 from app.core.config import settings
+from app.db.session import AsyncSessionLocal
 from app.routers import auth, health
+
+logger = logging.getLogger(__name__)
+
+_DEFAULT_DAYS = range(5)  # Mon–Fri
+
+
+async def _backfill_doctor_schedules() -> None:
+    """Create default Mon-Fri schedules for any doctor that has none."""
+    # Import here to avoid circular imports at module load time
+    from app.models.doctor import Doctor  # noqa: PLC0415
+    from app.models.doctor_schedule import DoctorSchedule  # noqa: PLC0415
+
+    async with AsyncSessionLocal() as db:
+        # Find doctors with zero schedule records
+        subq = (
+            select(DoctorSchedule.doctor_id)
+            .group_by(DoctorSchedule.doctor_id)
+            .having(func.count(DoctorSchedule.id) > 0)
+        )
+        result = await db.execute(
+            select(Doctor)
+            .where(Doctor.is_active == True)  # noqa: E712
+            .where(Doctor.id.not_in(subq))
+        )
+        doctors = result.scalars().all()
+
+        if not doctors:
+            return
+
+        logger.info(
+            "Backfilling default schedules for %d doctor(s) with no schedule records",
+            len(doctors),
+        )
+        for doctor in doctors:
+            for dow in _DEFAULT_DAYS:
+                db.add(DoctorSchedule(
+                    doctor_id=doctor.id,
+                    organization_id=doctor.organization_id,
+                    day_of_week=dow,
+                    start_time=time(9, 0),
+                    end_time=time(17, 0),
+                    slot_duration_minutes=30,
+                    break_start=time(13, 0),
+                    break_end=time(14, 0),
+                    is_active=True,
+                ))
+            logger.info("  → Created Mon-Fri schedules for doctor %s (%s)", doctor.id, doctor.name)
+
+        await db.commit()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await _backfill_doctor_schedules()
+    yield
 from app.routers.organization import router as organization_router
 from app.routers.doctor import router as doctor_router
 from app.routers.patient import router as patient_router
@@ -24,6 +85,7 @@ def create_app() -> FastAPI:
         version=settings.APP_VERSION,
         docs_url="/docs" if settings.DEBUG else None,
         redoc_url="/redoc" if settings.DEBUG else None,
+        lifespan=lifespan,
     )
 
     # ---------------------------------------------------------------------------

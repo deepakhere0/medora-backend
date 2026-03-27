@@ -94,6 +94,9 @@ class BookAppointmentResponse(BaseModel):
     id: UUID
     booking_id: str
     organization_name: str
+    hospital_address: str | None
+    hospital_city: str
+    hospital_state: str
     doctor_name: str
     doctor_specialization: str
     appointment_date: date
