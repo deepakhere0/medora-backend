@@ -46,6 +46,7 @@ class PatientAppointmentBrief(BaseModel):
     model_config = {"from_attributes": True}
 
     id: UUID
+    doctor_id: UUID
     doctor_name: str
     doctor_specialty: str | None
     doctor_photo_url: str | None
@@ -64,6 +65,29 @@ class PatientAppointmentBrief(BaseModel):
 class PatientAppointmentsResponse(BaseModel):
     appointments: list[PatientAppointmentBrief]
     total: int
+
+
+class RescheduleRequest(BaseModel):
+    new_date: str        # YYYY-MM-DD
+    new_start_time: str  # HH:MM
+    new_end_time: str    # HH:MM
+
+
+class RescheduleResponse(BaseModel):
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    booking_id: str | None
+    doctor_name: str
+    doctor_specialty: str | None
+    organization_name: str
+    hospital_city: str | None
+    hospital_state: str | None
+    appointment_date: date
+    start_time: time
+    end_time: time
+    status: str
+    notes: str | None
 
 
 class PatientDashboardResponse(BaseModel):

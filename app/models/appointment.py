@@ -94,6 +94,12 @@ class Appointment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     cancellation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
     token_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    booking_for: Mapped[str] = mapped_column(String, nullable=False, default="self", server_default="self")
+    guest_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    guest_age: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    guest_sex: Mapped[str | None] = mapped_column(String, nullable=True)
+    guest_phone: Mapped[str | None] = mapped_column(String, nullable=True)
+    guest_email: Mapped[str | None] = mapped_column(String, nullable=True)
 
     organization: Mapped["Organization"] = relationship(
         "Organization", back_populates="appointments", lazy="noload"

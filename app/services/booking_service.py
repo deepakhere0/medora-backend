@@ -11,6 +11,7 @@ from app.models.appointment import Appointment
 from app.models.doctor import Doctor
 from app.models.doctor_schedule import DoctorSchedule
 from app.models.organization import Organization
+from app.models.patient import Patient
 from app.models.patient_organization import PatientOrganization
 from app.schemas.booking import (
     AvailableSlot,
@@ -469,6 +470,12 @@ async def book_appointment(
         appointment_type="scheduled",
         booking_id=booking_id,
         notes=data.notes,
+        booking_for=data.booking_for,
+        guest_name=data.guest_name if data.booking_for == "someone_else" else None,
+        guest_age=data.guest_age if data.booking_for == "someone_else" else None,
+        guest_sex=data.guest_sex if data.booking_for == "someone_else" else None,
+        guest_phone=data.guest_phone if data.booking_for == "someone_else" else None,
+        guest_email=data.guest_email if data.booking_for == "someone_else" else None,
     )
     db.add(appointment)
 
@@ -490,6 +497,12 @@ async def book_appointment(
     elif not existing_link.is_active:
         existing_link.is_active = True
 
+    # Clear booking draft on successful booking
+    patient_result = await db.execute(select(Patient).where(Patient.id == patient_id))
+    patient = patient_result.scalar_one_or_none()
+    if patient is not None and patient.booking_draft is not None:
+        patient.booking_draft = None
+
     await db.commit()
     await db.refresh(appointment)
 
@@ -508,4 +521,10 @@ async def book_appointment(
         end_time=appointment.end_time.strftime("%H:%M"),
         status=appointment.status,
         created_at=appointment.created_at,
+        booking_for=appointment.booking_for,
+        guest_name=appointment.guest_name,
+        guest_age=appointment.guest_age,
+        guest_sex=appointment.guest_sex,
+        guest_phone=appointment.guest_phone,
+        guest_email=appointment.guest_email,
     )

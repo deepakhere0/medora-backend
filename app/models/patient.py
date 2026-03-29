@@ -16,6 +16,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -91,6 +92,7 @@ class Patient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     blood_pressure: Mapped[str | None] = mapped_column(String(20), nullable=True)
     heart_rate: Mapped[int | None] = mapped_column(Integer, nullable=True)
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)
+    booking_draft: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     appointments = relationship("Appointment", back_populates="patient", lazy="noload")

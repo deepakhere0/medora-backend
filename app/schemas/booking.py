@@ -88,6 +88,12 @@ class BookAppointmentRequest(BaseModel):
     appointment_date: date
     start_time: str       # "10:30"
     notes: str | None = None
+    booking_for: str = "self"        # "self" or "someone_else"
+    guest_name: str | None = None
+    guest_age: int | None = None
+    guest_sex: str | None = None
+    guest_phone: str | None = None
+    guest_email: str | None = None
 
 
 class BookAppointmentResponse(BaseModel):
@@ -104,3 +110,9 @@ class BookAppointmentResponse(BaseModel):
     end_time: str
     status: str
     created_at: datetime
+    booking_for: str
+    guest_name: str | None = None
+    guest_age: int | None = None
+    guest_sex: str | None = None
+    guest_phone: str | None = None
+    guest_email: str | None = None

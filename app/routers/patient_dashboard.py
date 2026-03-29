@@ -11,12 +11,15 @@ from app.schemas.patient_dashboard import (
     PatientDashboardResponse,
     PatientProfile,
     PatientProfileUpdate,
+    RescheduleRequest,
+    RescheduleResponse,
 )
 from app.services.patient_dashboard_service import (
     cancel_patient_appointment,
     get_patient_appointments,
     get_patient_dashboard,
     get_patient_profile,
+    reschedule_patient_appointment,
     update_patient_profile,
 )
 
@@ -51,8 +54,7 @@ async def update_profile(
 
 @router.get("/appointments", response_model=PatientAppointmentsResponse)
 async def patient_appointments(
-    status: str | None = Query(default=None),
-    upcoming_only: bool = Query(default=False),
+    filter: str = Query(default="upcoming", description="upcoming | past | cancelled | all"),
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=20, ge=1, le=100),
     current_patient: Patient = Depends(get_current_patient),
@@ -61,12 +63,28 @@ async def patient_appointments(
     appointments, total = await get_patient_appointments(
         db,
         patient_id=current_patient.id,
-        status=status,
-        upcoming_only=upcoming_only,
+        filter=filter,
         skip=skip,
         limit=limit,
     )
     return {"appointments": appointments, "total": total}
+
+
+@router.put("/appointments/{appointment_id}/reschedule", response_model=RescheduleResponse)
+async def reschedule_appointment(
+    appointment_id: UUID,
+    body: RescheduleRequest,
+    current_patient: Patient = Depends(get_current_patient),
+    db: AsyncSession = Depends(get_db),
+):
+    return await reschedule_patient_appointment(
+        db,
+        patient_id=current_patient.id,
+        appointment_id=appointment_id,
+        new_date=body.new_date,
+        new_start_time=body.new_start_time,
+        new_end_time=body.new_end_time,
+    )
 
 
 @router.patch("/appointments/{appointment_id}/cancel")

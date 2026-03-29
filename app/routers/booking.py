@@ -1,7 +1,9 @@
 from datetime import date
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_patient
@@ -28,6 +30,14 @@ from app.services.booking_service import (
 )
 
 router = APIRouter(prefix="/booking", tags=["Appointment Booking"])
+
+
+class SaveDraftRequest(BaseModel):
+    draft: dict[str, Any]
+
+
+class DraftResponse(BaseModel):
+    draft: dict[str, Any] | None
 
 
 # ---------------------------------------------------------------------------
@@ -125,3 +135,35 @@ async def book(
     db: AsyncSession = Depends(get_db),
 ):
     return await book_appointment(db, patient_id=current_patient.id, data=body)
+
+
+# ---------------------------------------------------------------------------
+# Draft endpoints
+# ---------------------------------------------------------------------------
+
+@router.post("/draft", response_model=dict, status_code=200)
+async def save_draft(
+    body: SaveDraftRequest,
+    current_patient: Patient = Depends(get_current_patient),
+    db: AsyncSession = Depends(get_db),
+):
+    current_patient.booking_draft = body.draft
+    await db.commit()
+    return {"success": True}
+
+
+@router.get("/draft", response_model=DraftResponse, status_code=200)
+async def get_draft(
+    current_patient: Patient = Depends(get_current_patient),
+):
+    return DraftResponse(draft=current_patient.booking_draft)
+
+
+@router.delete("/draft", response_model=dict, status_code=200)
+async def delete_draft(
+    current_patient: Patient = Depends(get_current_patient),
+    db: AsyncSession = Depends(get_db),
+):
+    current_patient.booking_draft = None
+    await db.commit()
+    return {"success": True}
