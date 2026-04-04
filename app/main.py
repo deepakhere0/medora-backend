@@ -65,6 +65,7 @@ async def lifespan(app: FastAPI):
     await _backfill_doctor_schedules()
     yield
 from app.routers.organization import router as organization_router
+from app.routers.users import router as users_router
 from app.routers.doctor import router as doctor_router
 from app.routers.patient import router as patient_router
 from app.routers.patient_auth import router as patient_auth_router
@@ -104,6 +105,7 @@ def create_app() -> FastAPI:
     # ---------------------------------------------------------------------------
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(auth.router, prefix="/api/v1")
+    app.include_router(users_router, prefix="/api/v1")
     app.include_router(
         organization_router,
         prefix="/api/v1",

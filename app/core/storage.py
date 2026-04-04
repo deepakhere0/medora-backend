@@ -69,3 +69,41 @@ def delete_file(file_path: str) -> None:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="File deletion failed",
         )
+
+
+def upload_logo(
+    file_bytes: bytes,
+    file_name: str,
+    content_type: str,
+    org_id: UUID,
+) -> str:
+    timestamp = int(time.time())
+    safe_name = file_name.replace(" ", "_")
+    path = f"logos/{org_id}/{timestamp}_{safe_name}"
+
+    try:
+        supabase_client.storage \
+            .from_(settings.SUPABASE_BUCKET) \
+            .upload(
+                path=path,
+                file=file_bytes,
+                file_options={"content-type": content_type},
+            )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Logo upload failed",
+        )
+
+    # 10-year signed URL — effectively permanent for a logo
+    expires_in = 10 * 365 * 24 * 3600
+    try:
+        response = supabase_client.storage \
+            .from_(settings.SUPABASE_BUCKET) \
+            .create_signed_url(path, expires_in)
+        return response["signedURL"]
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not generate logo URL",
+        )

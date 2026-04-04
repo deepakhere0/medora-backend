@@ -27,9 +27,13 @@ class OrganizationUpdate(BaseModel):
     address: str | None = None
     city: str | None = None
     state: str | None = None
+    pincode: str | None = None
     phone: str | None = None
     email: str | None = None
     website: str | None = None
+    description: str | None = None
+    operating_hours: dict | None = None
+    departments: list | None = None
 
 
 class OrganizationDetailResponse(BaseSchema):
@@ -37,11 +41,15 @@ class OrganizationDetailResponse(BaseSchema):
     name: str
     city: str
     state: str
+    pincode: str | None
     address: str | None
     phone: str | None
     email: str | None
     website: str | None
+    description: str | None
     logo_url: str | None
+    operating_hours: dict | None
+    departments: list | None
     is_approved: bool
     created_at: datetime
 

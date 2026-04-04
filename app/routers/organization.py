@@ -1,12 +1,13 @@
 import uuid
 from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import String, cast, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, require_role
+from app.core.storage import upload_logo
 from app.db.session import get_db
 from app.models.appointment import Appointment
 from app.models.doctor import Doctor
@@ -124,22 +125,110 @@ async def update_my_organization(
             )
         org.name = payload.name
 
-    if payload.address is not None:
-        org.address = payload.address
-    if payload.city is not None:
-        org.city = payload.city
-    if payload.state is not None:
-        org.state = payload.state
-    if payload.phone is not None:
-        org.phone = payload.phone
-    if payload.email is not None:
-        org.email = payload.email
-    if payload.website is not None:
-        org.website = payload.website
+    update_fields = ["address", "city", "state", "pincode", "phone", "email", "website", "description", "operating_hours", "departments"]
+    for field in update_fields:
+        value = getattr(payload, field)
+        if value is not None:
+            setattr(org, field, value)
 
     await db.commit()
     await db.refresh(org)
     return org
+
+
+@router.post("/upload-logo", response_model=dict, status_code=status.HTTP_200_OK)
+async def upload_organization_logo(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_role(UserRole.org_admin)),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.organization_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No organization linked to your account",
+        )
+
+    allowed_types = {"image/png", "image/jpeg", "image/jpg", "image/webp"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only PNG, JPG, JPEG, and WEBP images are allowed",
+        )
+
+    result = await db.execute(
+        select(Organization).where(Organization.id == current_user.organization_id)
+    )
+    org = result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+
+    file_bytes = await file.read()
+    logo_url = upload_logo(
+        file_bytes=file_bytes,
+        file_name=file.filename or "logo",
+        content_type=file.content_type,
+        org_id=current_user.organization_id,
+    )
+
+    org.logo_url = logo_url
+    await db.commit()
+    return {"logo_url": logo_url}
+
+
+@router.post("/departments", response_model=dict, status_code=status.HTTP_200_OK)
+async def add_department(
+    body: dict,
+    current_user: User = Depends(require_role(UserRole.org_admin)),
+    db: AsyncSession = Depends(get_db),
+):
+    name = body.get("name", "").strip()
+    if not name:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Department name is required")
+
+    if current_user.organization_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No organization linked to your account")
+
+    result = await db.execute(
+        select(Organization).where(Organization.id == current_user.organization_id)
+    )
+    org = result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+
+    departments: list = list(org.departments or [])
+    if name in departments:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Department already exists")
+
+    departments.append(name)
+    org.departments = departments
+    await db.commit()
+    return {"departments": departments}
+
+
+@router.delete("/departments/{department_name}", response_model=dict, status_code=status.HTTP_200_OK)
+async def remove_department(
+    department_name: str,
+    current_user: User = Depends(require_role(UserRole.org_admin)),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.organization_id is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No organization linked to your account")
+
+    result = await db.execute(
+        select(Organization).where(Organization.id == current_user.organization_id)
+    )
+    org = result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+
+    departments: list = list(org.departments or [])
+    if department_name not in departments:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Department not found")
+
+    departments.remove(department_name)
+    org.departments = departments
+    await db.commit()
+    return {"departments": departments}
 
 
 # ---------------------------------------------------------------------------
