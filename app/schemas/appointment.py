@@ -118,6 +118,15 @@ class AppointmentListItem(BaseModel):
     appointment_type: AppointmentType
     status: AppointmentStatus
     token_number: int | None
+    booking_for: str | None = None
+    guest_name: str | None = None
+    # Patient info
+    patient_name: str | None = None
+    patient_phone: str | None = None
+    patient_code: str | None = None
+    # Doctor info
+    doctor_name: str | None = None
+    doctor_specialization: str | None = None
     created_at: datetime
 
     @computed_field

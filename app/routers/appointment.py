@@ -20,6 +20,7 @@ from app.schemas.appointment import (
     WalkInAppointmentResponse,
 )
 from app.services.appointment_service import (
+    AppointmentRow,
     cancel_appointment,
     create_appointment,
     create_walkin_appointment,
@@ -79,8 +80,42 @@ async def list_appointments_endpoint(
         db, org_id, doctor_id, patient_id,
         appointment_date, appt_status, page, limit,
     )
+
+    items: list[AppointmentListItem] = []
+    for row in appointments:
+        appt = row.appointment
+
+        # For guest bookings ("someone_else"), prefer guest fields over the
+        # registered patient's details so the table shows who is actually seen.
+        if appt.booking_for == "someone_else" and appt.guest_name:
+            display_patient_name = appt.guest_name
+            display_patient_phone = appt.guest_phone
+        else:
+            display_patient_name = row.patient_name
+            display_patient_phone = row.patient_phone
+
+        items.append(AppointmentListItem(
+            id=appt.id,
+            doctor_id=appt.doctor_id,
+            patient_id=appt.patient_id,
+            appointment_date=appt.appointment_date,
+            start_time=appt.start_time,
+            end_time=appt.end_time,
+            appointment_type=appt.appointment_type,
+            status=appt.status,
+            token_number=appt.token_number,
+            booking_for=appt.booking_for,
+            guest_name=appt.guest_name,
+            patient_name=display_patient_name,
+            patient_phone=display_patient_phone,
+            patient_code=row.patient_code,
+            doctor_name=row.doctor_name,
+            doctor_specialization=row.doctor_specialization,
+            created_at=appt.created_at,
+        ))
+
     return AppointmentListResponse(
-        appointments=appointments,
+        appointments=items,
         total=total,
         page=page,
         limit=limit,

@@ -43,6 +43,9 @@ class DoctorCreate(BaseModel):
     email: EmailStr | None = None
     photo_url: str | None = None
     staff_record: str | None = None
+    medical_council: str | None = None
+    registration_year: int | None = None
+    registration_certificate_url: str | None = None
 
     @field_validator("name")
     @classmethod
@@ -129,6 +132,9 @@ class DoctorRead(BaseModel):
     email: str | None
     photo_url: str | None
     staff_record: str | None
+    medical_council: str | None
+    registration_year: int | None
+    registration_certificate_url: str | None
     status: DoctorStatus
     is_active: bool
     created_at: datetime

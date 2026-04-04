@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.appointment import Appointment
 from app.models.doctor import Doctor
 from app.models.doctor_schedule import DoctorSchedule
+from app.models.notification import Notification
 from app.models.organization import Organization
 from app.models.patient import Patient
 from app.models.patient_organization import PatientOrganization
@@ -502,6 +503,20 @@ async def book_appointment(
     patient = patient_result.scalar_one_or_none()
     if patient is not None and patient.booking_draft is not None:
         patient.booking_draft = None
+
+    # Create notification for the organization dashboard
+    patient_display = data.guest_name if data.booking_for == "someone_else" and data.guest_name else (
+        patient.name if patient else "Unknown"
+    )
+    db.add(Notification(
+        organization_id=data.organization_id,
+        title="New Appointment Booked",
+        message=(
+            f"Patient {patient_display} booked with Dr. {doctor.name} "
+            f"on {data.appointment_date.strftime('%b %d, %Y')} at {slot_start.strftime('%H:%M')}"
+        ),
+        type="info",
+    ))
 
     await db.commit()
     await db.refresh(appointment)

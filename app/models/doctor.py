@@ -97,6 +97,9 @@ class Doctor(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         index=True,
     )
     staff_record: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    medical_council: Mapped[str | None] = mapped_column(String, nullable=True)
+    registration_year: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    registration_certificate_url: Mapped[str | None] = mapped_column(String, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     organization = relationship("Organization", back_populates="doctors")

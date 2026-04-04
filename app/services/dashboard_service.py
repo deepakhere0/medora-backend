@@ -2,13 +2,14 @@ from calendar import monthrange
 from datetime import date, timedelta
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import distinct, func, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.doctor import Doctor, DoctorStatus
 from app.models.patient import Patient
+from app.models.patient_organization import PatientOrganization
 from app.schemas.dashboard import (
     AppointmentStats,
     DashboardResponse,
@@ -29,25 +30,40 @@ async def _get_patient_stats(
     ).replace(day=1)
     last_day_last_month = first_day_this_month - timedelta(days=1)
 
-    # total active patients in org
-    active_result = await db.execute(
-        select(func.count(Patient.id)).where(
-            Patient.organization_id == org_id,
-            Patient.is_active == True,
+    # Patients linked to this org via direct organization_id (walk-in) OR
+    # via the patient_organizations junction table (booking portal).
+    # Using OR + subquery ensures existing data is counted correctly without migration.
+    linked_via_junction = (
+        select(PatientOrganization.patient_id).where(
+            PatientOrganization.organization_id == org_id,
+            PatientOrganization.is_active.is_(True),
         )
     )
-    total_active: int = active_result.scalar_one()
+    org_filter = or_(
+        Patient.organization_id == org_id,
+        Patient.id.in_(linked_via_junction),
+    )
+
+    # total active patients in org — distinct avoids double-counting patients
+    # that appear in BOTH the direct organization_id column and the junction table
+    active_result = await db.execute(
+        select(func.count(distinct(Patient.id))).where(
+            org_filter,
+            Patient.is_active.is_(True),
+        )
+    )
+    total_active: int = active_result.scalar_one() or 0
 
     # patients created last calendar month
     last_month_result = await db.execute(
-        select(func.count(Patient.id)).where(
-            Patient.organization_id == org_id,
-            Patient.is_active == True,
+        select(func.count(distinct(Patient.id))).where(
+            org_filter,
+            Patient.is_active.is_(True),
             Patient.created_at >= first_day_last_month,
             Patient.created_at <= last_day_last_month,
         )
     )
-    total_last_month: int = last_month_result.scalar_one()
+    total_last_month: int = last_month_result.scalar_one() or 0
 
     if total_last_month == 0:
         growth: float = 0.0

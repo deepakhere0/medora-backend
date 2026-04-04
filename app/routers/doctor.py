@@ -1,12 +1,15 @@
+import time as _time
 from datetime import time
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.dependencies import require_role
+from app.core.storage import supabase_client
 from app.db.session import get_db
 from app.models.doctor_schedule import DoctorSchedule
 from app.models.user import User, UserRole
@@ -80,6 +83,53 @@ async def create_doctor_endpoint(
 ) -> DoctorRead:
     org_id = _get_org_id(current_user)
     return await create_doctor(db, org_id, data)
+
+
+@router.post(
+    "/upload-certificate",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+)
+async def upload_certificate_endpoint(
+    file: UploadFile = File(...),
+    current_user: User = Depends(require_role(UserRole.org_admin)),
+) -> dict:
+    """Upload a registration certificate (PDF or image) to Supabase Storage.
+    Returns the file path that can be stored in registration_certificate_url."""
+    org_id = _get_org_id(current_user)
+
+    allowed_content_types = {
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+    }
+    if file.content_type not in allowed_content_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only PDF and image files (JPEG, PNG, WEBP) are allowed",
+        )
+
+    file_bytes = await file.read()
+    timestamp = int(_time.time())
+    safe_name = (file.filename or "certificate").replace(" ", "_")
+    path = f"{org_id}/doctor-certificates/{timestamp}_{safe_name}"
+
+    try:
+        supabase_client.storage \
+            .from_(settings.SUPABASE_BUCKET) \
+            .upload(
+                path=path,
+                file=file_bytes,
+                file_options={"content-type": file.content_type},
+            )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="File upload failed",
+        )
+
+    return {"file_path": path, "registration_certificate_url": path}
 
 
 @router.get("/{doctor_id}", response_model=DoctorRead, status_code=status.HTTP_200_OK)

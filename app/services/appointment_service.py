@@ -1,5 +1,6 @@
 import random
 import string
+from dataclasses import dataclass
 from datetime import date, time
 from uuid import UUID
 
@@ -10,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.doctor import Doctor
 from app.models.patient import Patient
+from app.models.patient_organization import PatientOrganization
 from app.schemas.appointment import (
     AppointmentCreate,
     AppointmentStatus as SchemaStatus,
@@ -147,6 +149,17 @@ async def get_appointment(
     return appointment
 
 
+@dataclass
+class AppointmentRow:
+    """Appointment with patient and doctor fields resolved via JOIN."""
+    appointment: Appointment
+    patient_name: str | None
+    patient_phone: str | None
+    patient_code: str | None
+    doctor_name: str | None
+    doctor_specialization: str | None
+
+
 async def list_appointments(
     db: AsyncSession,
     org_id: UUID,
@@ -156,7 +169,7 @@ async def list_appointments(
     appt_status: SchemaStatus | None,
     page: int,
     limit: int,
-) -> tuple[list[Appointment], int]:
+) -> tuple[list[AppointmentRow], int]:
     filters = [
         Appointment.organization_id == org_id,
         Appointment.is_active.is_(True),
@@ -177,16 +190,36 @@ async def list_appointments(
     )
     total: int = count_result.scalar_one()
 
+    # Direct JOIN — avoids relationship lazy/noload issues entirely.
     rows_result = await db.execute(
-        select(Appointment)
+        select(
+            Appointment,
+            Patient.name.label("patient_name"),
+            Patient.phone.label("patient_phone"),
+            Patient.patient_code.label("patient_code"),
+            Doctor.name.label("doctor_name"),
+            Doctor.specialization.label("doctor_specialization"),
+        )
+        .outerjoin(Patient, Patient.id == Appointment.patient_id)
+        .outerjoin(Doctor, Doctor.id == Appointment.doctor_id)
         .where(where_clause)
         .order_by(Appointment.appointment_date.asc(), Appointment.start_time.asc())
         .offset((page - 1) * limit)
         .limit(limit)
     )
-    appointments: list[Appointment] = list(rows_result.scalars().all())
 
-    return appointments, total
+    rows = [
+        AppointmentRow(
+            appointment=row.Appointment,
+            patient_name=row.patient_name,
+            patient_phone=row.patient_phone,
+            patient_code=row.patient_code,
+            doctor_name=row.doctor_name,
+            doctor_specialization=row.doctor_specialization,
+        )
+        for row in rows_result.all()
+    ]
+    return rows, total
 
 
 async def update_appointment(
@@ -370,7 +403,21 @@ async def create_walkin_appointment(
     ) or 0
     token_number = token_count + 1
 
-    # 5. Create appointment (same session — single commit covers both)
+    # 5. Ensure patient is linked in patient_organizations (upsert-style check)
+    existing_link = await db.scalar(
+        select(PatientOrganization).where(
+            PatientOrganization.patient_id == patient.id,
+            PatientOrganization.organization_id == org_id,
+        )
+    )
+    if existing_link is None:
+        db.add(PatientOrganization(
+            patient_id=patient.id,
+            organization_id=org_id,
+            is_active=True,
+        ))
+
+    # 6. Create appointment (same session — single commit covers both)
     appointment = Appointment(
         organization_id=org_id,
         doctor_id=data.doctor_id,
