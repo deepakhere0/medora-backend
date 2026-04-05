@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import time
 
@@ -92,9 +93,19 @@ def create_app() -> FastAPI:
     # ---------------------------------------------------------------------------
     # Middleware
     # ---------------------------------------------------------------------------
+    _origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://medorahealth.in",
+        "https://www.medorahealth.in",
+        "https://medora-frontend.vercel.app",
+    ]
+    _extra = os.getenv("CORS_ORIGINS", "").split(",")
+    origins = [o.strip() for o in _origins + _extra if o.strip()]
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
