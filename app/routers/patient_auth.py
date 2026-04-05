@@ -7,6 +7,7 @@ from app.models.patient import Patient
 from app.schemas.patient_auth import (
     ForgotPasswordRequest,
     ForgotPasswordResponse,
+    GoogleLoginRequest,
     PatientBrief,
     PatientLoginRequest,
     PatientLoginResponse,
@@ -19,6 +20,7 @@ from app.schemas.patient_auth import (
 )
 from app.services.patient_auth_service import (
     forgot_password,
+    google_login_patient,
     login_patient,
     register_patient,
     reset_password,
@@ -53,6 +55,14 @@ async def get_patient_me(
     current_patient: Patient = Depends(get_current_patient),
 ):
     return current_patient
+
+
+@router.post("/google-login", response_model=PatientLoginResponse)
+async def google_login_patient_endpoint(
+    data: GoogleLoginRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    return await google_login_patient(db, data.credential)
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)

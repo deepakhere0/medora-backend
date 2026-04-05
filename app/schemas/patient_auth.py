@@ -111,3 +111,7 @@ class ResetPasswordRequest(BaseModel):
 
 class ResetPasswordResponse(BaseModel):
     message: str
+
+
+class GoogleLoginRequest(BaseModel):
+    credential: str

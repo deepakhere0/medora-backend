@@ -25,6 +25,8 @@ class Settings(BaseSettings):
 
     ANTHROPIC_API_KEY: str = ""
 
+    GOOGLE_CLIENT_ID: str = ""
+
 
 
 settings = Settings()

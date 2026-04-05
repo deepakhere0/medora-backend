@@ -1,5 +1,5 @@
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
@@ -260,6 +260,80 @@ async def verify_otp(db: AsyncSession, data: VerifyOTPRequest) -> dict:
     reset_token = jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
     return {"message": "OTP verified", "reset_token": reset_token}
+
+
+async def google_login_patient(db: AsyncSession, credential: str) -> dict:
+    from app.core.config import settings
+    from app.core.google_auth import verify_google_token
+
+    # 1. Verify Google token
+    try:
+        user_info = verify_google_token(credential, settings.GOOGLE_CLIENT_ID)
+    except Exception:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Google token",
+        )
+
+    email = user_info.get("email")
+    name = user_info.get("name") or email
+
+    if not email:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Google token did not provide an email address",
+        )
+
+    # 2. Look up existing patient by email
+    result = await db.execute(select(Patient).where(Patient.email == email))
+    patient = result.scalar_one_or_none()
+
+    if patient is not None:
+        # Existing patient — just log in
+        if not patient.is_active:
+            from fastapi import HTTPException, status
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is deactivated",
+            )
+    else:
+        # New patient — auto-register
+        patient_code = await _generate_patient_code(db)
+        # phone and date_of_birth are NOT NULL in the DB; use placeholders the
+        # user can update from their profile later.
+        placeholder_phone = f"GOOGLE_{secrets.token_hex(6)}"
+        placeholder_dob = date(1900, 1, 1)
+
+        patient = Patient(
+            name=name,
+            email=email,
+            phone=placeholder_phone,
+            date_of_birth=placeholder_dob,
+            hashed_password=None,
+            patient_code=patient_code,
+            organization_id=None,
+            is_active=True,
+        )
+        db.add(patient)
+        await db.commit()
+        await db.refresh(patient)
+
+    # 3. Issue JWT
+    access_token = create_access_token(subject=str(patient.id), role="patient")
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "patient": {
+            "id": patient.id,
+            "name": patient.name,
+            "email": patient.email,
+            "phone": patient.phone,
+            "patient_code": patient.patient_code,
+        },
+    }
 
 
 async def reset_password(db: AsyncSession, data: ResetPasswordRequest) -> dict:
