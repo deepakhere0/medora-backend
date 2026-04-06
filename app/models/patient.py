@@ -94,6 +94,8 @@ class Patient(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     photo_url: Mapped[str | None] = mapped_column(String, nullable=True)
     booking_draft: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    ai_calls_today: Mapped[int] = mapped_column(Integer, default=0, server_default="0", nullable=False)
+    ai_calls_date: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     appointments = relationship("Appointment", back_populates="patient", lazy="noload")
     reports = relationship("Report", back_populates="patient", lazy="noload")
