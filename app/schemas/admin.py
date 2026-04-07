@@ -40,6 +40,9 @@ class AdminOrgBrief(BaseModel):
     name: str
     city: str
     state: str
+    address: str | None
+    pincode: str | None
+    phone: str | None
     is_approved: bool
     admin_email: str | None
     doctor_count: int
