@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from app.models.organization import Organization
 from app.models.user import User, UserRole
-from app.schemas.organization import HospitalRegistrationRequest, HospitalRegistrationResponse, OrganizationCreate
+from app.schemas.organization import HospitalRegistrationRequest, HospitalRegistrationResponse, OrganizationCreate, OrganizationResponse
 
 
 async def create_organization(
@@ -72,16 +72,49 @@ async def approve_organization(
         if user is not None and user.organization_id != organization.id:
             user.organization_id = organization.id
 
+    # Activate all org_admin users for this organization
+    admin_result = await db.execute(
+        select(User).where(
+            User.organization_id == organization.id,
+            User.role == UserRole.org_admin,
+        )
+    )
+    for admin in admin_result.scalars().all():
+        admin.is_active = True
+
     await db.commit()
     await db.refresh(organization)
     return organization
 
 
-async def get_pending_organizations(db: AsyncSession) -> list[Organization]:
-    result = await db.execute(
-        select(Organization).where(Organization.is_approved == False)  # noqa: E712
+async def get_pending_organizations(db: AsyncSession) -> list[OrganizationResponse]:
+    admin_user = User.__table__.alias("admin_user")
+    stmt = (
+        select(
+            Organization,
+            admin_user.c.email.label("admin_email"),
+        )
+        .outerjoin(admin_user, Organization.created_by == admin_user.c.id)
+        .where(Organization.is_approved == False)  # noqa: E712
+        .order_by(Organization.created_at.desc())
     )
-    return list(result.scalars().all())
+    rows = (await db.execute(stmt)).all()
+    return [
+        OrganizationResponse(
+            id=row.Organization.id,
+            name=row.Organization.name,
+            city=row.Organization.city,
+            state=row.Organization.state,
+            pincode=row.Organization.pincode,
+            is_approved=row.Organization.is_approved,
+            created_by=row.Organization.created_by,
+            registration_number=row.Organization.registration_number,
+            registration_certificate_url=row.Organization.registration_certificate_url,
+            admin_email=row.admin_email,
+            created_at=row.Organization.created_at,
+        )
+        for row in rows
+    ]
 
 
 async def get_all_organizations(db: AsyncSession) -> list[Organization]:
@@ -120,6 +153,8 @@ async def register_hospital(
         address=data.org_address,
         phone=data.org_phone,
         email=data.org_email,
+        registration_number=data.registration_number,
+        pincode=data.pincode,
         is_approved=False,
         created_by=None,  # will be patched after user flush
     )
@@ -134,7 +169,7 @@ async def register_hospital(
         organization_id=organization.id,
         name=data.admin_name,
         phone=data.admin_phone,
-        is_active=True,
+        is_active=False,  # activated when org is approved
     )
     db.add(user)
     await db.flush()  # get user.id
@@ -153,5 +188,8 @@ async def register_hospital(
         user_id=user.id,
         user_email=user.email,
         is_approved=organization.is_approved,
+        registration_number=organization.registration_number,
+        registration_certificate_url=organization.registration_certificate_url,
+        pincode=organization.pincode,
         message="Hospital registered successfully. Pending approval by Medora administration.",
     )

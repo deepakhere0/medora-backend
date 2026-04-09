@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 
 from app.schemas.base import BaseSchema
 
@@ -17,8 +17,12 @@ class OrganizationResponse(BaseSchema):
     name: str
     city: str
     state: str
+    pincode: str | None = None
     is_approved: bool
     created_by: uuid.UUID | None = None
+    registration_number: str | None = None
+    registration_certificate_url: str | None = None
+    admin_email: str | None = None
     created_at: datetime
 
 
@@ -51,6 +55,8 @@ class OrganizationDetailResponse(BaseSchema):
     operating_hours: dict | None
     departments: list | None
     is_approved: bool
+    registration_number: str | None = None
+    registration_certificate_url: str | None = None
     created_at: datetime
 
 
@@ -62,6 +68,8 @@ class HospitalRegistrationRequest(BaseModel):
     org_address: str | None = None
     org_phone: str | None = None
     org_email: str | None = None
+    registration_number: str
+    pincode: str = Field(pattern=r'^[1-9][0-9]{5}$')
 
     # Admin user details
     admin_email: EmailStr
@@ -76,4 +84,7 @@ class HospitalRegistrationResponse(BaseModel):
     user_id: uuid.UUID
     user_email: str
     is_approved: bool
+    registration_number: str | None = None
+    registration_certificate_url: str | None = None
+    pincode: str | None = None
     message: str

@@ -7,7 +7,7 @@ from sqlalchemy import String, cast, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, require_role
-from app.core.storage import upload_logo
+from app.core.storage import upload_certificate, upload_logo
 from app.db.session import get_db
 from app.models.appointment import Appointment
 from app.models.doctor import Doctor
@@ -458,3 +458,155 @@ async def mark_notification_read(
     notification.is_read = True
     await db.commit()
     return {"success": True}
+
+
+# ---------------------------------------------------------------------------
+# Certificate upload (public - called right after registration, no token yet)
+# ---------------------------------------------------------------------------
+
+@router.post(
+    '/{org_id}/upload-certificate',
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+)
+async def upload_registration_certificate(
+    org_id: uuid.UUID,
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Upload hospital registration certificate. No auth required - called immediately after registration."""
+    allowed_types = {"application/pdf", "image/jpeg", "image/png", "image/jpg"}
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only PDF, JPG, and PNG files are allowed",
+        )
+
+    contents = await file.read()
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File size must be less than 5MB",
+        )
+
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+
+    try:
+        certificate_url = upload_certificate(
+            file_bytes=contents,
+            file_name=file.filename or "certificate",
+            content_type=file.content_type or "application/octet-stream",
+            org_id=org_id,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Certificate upload failed: {exc}",
+        )
+
+    org.registration_certificate_url = certificate_url
+    await db.commit()
+    return {"success": True, "certificate_url": certificate_url}
+
+
+# ---------------------------------------------------------------------------
+# Super admin - reject, suspend, delete
+# ---------------------------------------------------------------------------
+
+@router.patch("/{org_id}/reject", response_model=dict)
+async def reject_organization_endpoint(
+    org_id: uuid.UUID,
+    _: User = Depends(require_role(UserRole.super_admin)),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Reject a pending organization: deactivate its admin user and delete the org record."""
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+    if org.is_approved:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot reject an already approved organization",
+        )
+
+    # Deactivate the org admin user
+    admin_result = await db.execute(
+        select(User).where(User.organization_id == org_id, User.role == UserRole.org_admin)
+    )
+    admin_user = admin_result.scalar_one_or_none()
+    if admin_user:
+        admin_user.is_active = False
+        admin_user.organization_id = None
+
+    # Nullify created_by to break the circular FK before deleting
+    org.created_by = None
+    await db.flush()
+
+    await db.delete(org)
+    await db.commit()
+    return {"success": True, "message": "Organization rejected and removed"}
+
+
+@router.patch("/{org_id}/suspend", response_model=dict)
+async def suspend_organization_endpoint(
+    org_id: uuid.UUID,
+    _: User = Depends(require_role(UserRole.super_admin)),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Suspend an approved organization: set is_approved=False and deactivate all its users."""
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+
+    org.is_approved = False
+
+    users_result = await db.execute(select(User).where(User.organization_id == org_id))
+    for user in users_result.scalars().all():
+        user.is_active = False
+
+    await db.commit()
+    return {"success": True, "message": f"Organization '{org.name}' suspended"}
+
+
+@router.delete("/{org_id}", response_model=dict)
+async def delete_organization_endpoint(
+    org_id: uuid.UUID,
+    _: User = Depends(require_role(UserRole.super_admin)),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Permanently delete an organization. Deactivates users; fails with 409 if doctors/appointments exist."""
+    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    org = result.scalar_one_or_none()
+    if org is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
+
+    org_name = org.name
+
+    # Deactivate and unlink all users in this org
+    users_result = await db.execute(select(User).where(User.organization_id == org_id))
+    for user in users_result.scalars().all():
+        user.is_active = False
+        user.organization_id = None
+
+    # Break created_by circular FK
+    org.created_by = None
+    await db.flush()
+
+    try:
+        await db.delete(org)
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Cannot delete: organization has linked records (doctors, appointments, etc.). Suspend it instead. Detail: {exc}",
+        )
+
+    return {"success": True, "message": f"Organization '{org_name}' permanently deleted"}

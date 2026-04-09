@@ -210,6 +210,8 @@ async def get_all_organizations(db: AsyncSession) -> AdminOrgsResponse:
             admin_email=row.admin_email,
             doctor_count=row.doctor_count,
             patient_count=row.patient_count,
+            registration_number=row.Organization.registration_number,
+            registration_certificate_url=row.Organization.registration_certificate_url,
             created_at=row.Organization.created_at,
         )
         for row in rows

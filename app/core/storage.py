@@ -71,6 +71,33 @@ def delete_file(file_path: str) -> None:
         )
 
 
+
+
+def upload_certificate(
+    file_bytes: bytes,
+    file_name: str,
+    content_type: str,
+    org_id: UUID,
+) -> str:
+    timestamp = int(time.time())
+    safe_name = file_name.replace(" ", "_")
+    path = f"registration-certificates/{org_id}/{timestamp}_{safe_name}"
+
+    try:
+        supabase_client.storage             .from_(settings.SUPABASE_BUCKET)             .upload(
+                path=path,
+                file=file_bytes,
+                file_options={"content-type": content_type, "upsert": "true"},
+            )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Certificate upload failed: {exc}",
+        )
+
+    public_url: str = supabase_client.storage         .from_(settings.SUPABASE_BUCKET)         .get_public_url(path)
+    return public_url
+
 def upload_logo(
     file_bytes: bytes,
     file_name: str,

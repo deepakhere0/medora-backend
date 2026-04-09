@@ -29,7 +29,8 @@
       "Bash(TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNjUwNzViMy1lMzAxLTRjOGMtYjBmOC0xMDljZGM1ODZkM2YiLCJyb2xlIjoic3VwZXJfYWRtaW4iLCJleHAiOjE3NzQzNzk1NzJ9.SL_IOdpqfP4eHZq9dJVUeo-R9ICY8GdycGJiAXNDT4\")",
       "Bash(pkill -f \"uvicorn app.main:app\")",
       "Bash(xargs grep:*)",
-      "Bash(.venv/Scripts/pip freeze:*)"
+      "Bash(.venv/Scripts/pip freeze:*)",
+      "Bash(.venv/Scripts/alembic current:*)"
     ]
   }
 }

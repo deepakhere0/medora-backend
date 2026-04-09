@@ -47,6 +47,8 @@ class AdminOrgBrief(BaseModel):
     admin_email: str | None
     doctor_count: int
     patient_count: int
+    registration_number: str | None = None
+    registration_certificate_url: str | None = None
     created_at: datetime
 
 

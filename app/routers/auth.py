@@ -8,6 +8,7 @@ from app.core.dependencies import get_current_user
 from app.core.google_auth import verify_google_token
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import get_db
+from app.models.organization import Organization
 from app.models.user import User, UserRole
 from app.schemas.auth import LoginResponse
 from app.schemas.user import (
@@ -55,6 +56,21 @@ async def login(
             detail="Invalid email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is deactivated",
+        )
+    if user.role == UserRole.org_admin and user.organization_id is not None:
+        org_result = await db.execute(
+            select(Organization).where(Organization.id == user.organization_id)
+        )
+        org = org_result.scalar_one_or_none()
+        if org is None or not org.is_approved:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your organization is pending approval. You will be able to login once approved by the Medora administration.",
+            )
     access_token = create_access_token(subject=str(user.id), role=user.role.value)
     return LoginResponse(
         access_token=access_token,
@@ -157,6 +173,16 @@ async def org_google_login(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Account is deactivated",
         )
+    if user.organization_id is not None:
+        org_result = await db.execute(
+            select(Organization).where(Organization.id == user.organization_id)
+        )
+        org = org_result.scalar_one_or_none()
+        if org is None or not org.is_approved:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Your organization is pending approval. You will be able to login once approved by the Medora administration.",
+            )
 
     # 4. Issue JWT and return
     access_token = create_access_token(subject=str(user.id), role=user.role.value)
