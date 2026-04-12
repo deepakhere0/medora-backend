@@ -3,7 +3,7 @@ from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import String, cast, select, update
+from sqlalchemy import String, cast, delete, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.dependencies import get_current_user, require_role
@@ -577,36 +577,65 @@ async def suspend_organization_endpoint(
 
 @router.delete("/{org_id}", response_model=dict)
 async def delete_organization_endpoint(
-    org_id: uuid.UUID,
+    org_id: str,
     _: User = Depends(require_role(UserRole.super_admin)),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Permanently delete an organization. Deactivates users; fails with 409 if doctors/appointments exist."""
-    result = await db.execute(select(Organization).where(Organization.id == org_id))
+    """Permanently delete an organization and ALL linked data."""
+    try:
+        org_uuid = uuid.UUID(org_id)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid organization ID")
+
+    result = await db.execute(select(Organization).where(Organization.id == org_uuid))
     org = result.scalar_one_or_none()
     if org is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Organization not found")
 
     org_name = org.name
 
-    # Deactivate and unlink all users in this org
-    users_result = await db.execute(select(User).where(User.organization_id == org_id))
-    for user in users_result.scalars().all():
-        user.is_active = False
-        user.organization_id = None
-
-    # Break created_by circular FK
-    org.created_by = None
-    await db.flush()
-
     try:
-        await db.delete(org)
-        await db.commit()
-    except Exception as exc:
-        await db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Cannot delete: organization has linked records (doctors, appointments, etc.). Suspend it instead. Detail: {exc}",
-        )
+        # Delete ALL linked records in correct order using raw SQL
+        # Child records first, then parent
 
-    return {"success": True, "message": f"Organization '{org_name}' permanently deleted"}
+        # 1. Appointments (references both doctors and organizations)
+        await db.execute(text("DELETE FROM appointments WHERE organization_id = :org_id"), {"org_id": str(org_uuid)})
+
+        # 2. Doctor schedules
+        await db.execute(text("DELETE FROM doctor_schedules WHERE organization_id = :org_id"), {"org_id": str(org_uuid)})
+
+        # 3. Medical history
+        await db.execute(text("DELETE FROM medical_history WHERE organization_id = :org_id"), {"org_id": str(org_uuid)})
+
+        # 4. Notifications
+        await db.execute(text("DELETE FROM notifications WHERE organization_id = :org_id"), {"org_id": str(org_uuid)})
+
+        # 5. Patient organizations
+        await db.execute(text("DELETE FROM patient_organizations WHERE organization_id = :org_id"), {"org_id": str(org_uuid)})
+
+        # 6. Reports
+        await db.execute(text("DELETE FROM reports WHERE organization_id = :org_id"), {"org_id": str(org_uuid)})
+
+        # 7. Patients
+        await db.execute(text("DELETE FROM patients WHERE organization_id = :org_id"), {"org_id": str(org_uuid)})
+
+        # 8. Doctors
+        await db.execute(text("DELETE FROM doctors WHERE organization_id = :org_id"), {"org_id": str(org_uuid)})
+
+        # 9. Users
+        await db.execute(text("DELETE FROM users WHERE organization_id = :org_id"), {"org_id": str(org_uuid)})
+
+        # 10. Finally, the organization itself
+        await db.execute(text("DELETE FROM organizations WHERE id = :org_id"), {"org_id": str(org_uuid)})
+
+        await db.commit()
+        return {"success": True, "message": f"Organization '{org_name}' and all linked data permanently deleted"}
+
+    except Exception as e:
+        await db.rollback()
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete organization: {str(e)}",
+        )
