@@ -9,5 +9,11 @@ from app.models.report import Report
 from app.models.medical_history import MedicalHistory
 from app.models.doctor_schedule import DoctorSchedule
 from app.models.notification import Notification
+from app.models.review import Review
+from app.models.online_consultation import OnlineConsultation
 
-__all__ = ["User", "Organization", "Doctor", "Patient", "PatientOrganization", "OTPRecord", "Appointment", "Report", "MedicalHistory", "DoctorSchedule", "Notification"]
+__all__ = [
+    "User", "Organization", "Doctor", "Patient", "PatientOrganization",
+    "OTPRecord", "Appointment", "Report", "MedicalHistory", "DoctorSchedule",
+    "Notification", "Review", "OnlineConsultation",
+]

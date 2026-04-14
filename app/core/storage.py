@@ -98,6 +98,54 @@ def upload_certificate(
     public_url: str = supabase_client.storage         .from_(settings.SUPABASE_BUCKET)         .get_public_url(path)
     return public_url
 
+def upload_doctor_photo(
+    file_bytes: bytes,
+    content_type: str,
+    doctor_id: UUID,
+    ext: str,
+) -> str:
+    """Upload a doctor's profile photo and return its public URL."""
+    path = f"doctors/{doctor_id}/profile.{ext}"
+    try:
+        supabase_client.storage \
+            .from_(settings.SUPABASE_BUCKET) \
+            .upload(
+                path=path,
+                file=file_bytes,
+                file_options={"content-type": content_type, "upsert": "true"},
+            )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Photo upload failed: {exc}",
+        )
+    return supabase_client.storage.from_(settings.SUPABASE_BUCKET).get_public_url(path)
+
+
+def upload_doctor_certificate(
+    file_bytes: bytes,
+    content_type: str,
+    doctor_id: UUID,
+    ext: str,
+) -> str:
+    """Upload a doctor's NMC certificate and return its public URL."""
+    path = f"doctors/{doctor_id}/nmc_certificate.{ext}"
+    try:
+        supabase_client.storage \
+            .from_(settings.SUPABASE_BUCKET) \
+            .upload(
+                path=path,
+                file=file_bytes,
+                file_options={"content-type": content_type, "upsert": "true"},
+            )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Certificate upload failed: {exc}",
+        )
+    return supabase_client.storage.from_(settings.SUPABASE_BUCKET).get_public_url(path)
+
+
 def upload_logo(
     file_bytes: bytes,
     file_name: str,

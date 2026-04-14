@@ -33,10 +33,10 @@ class DoctorSchedule(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         nullable=False,
         index=True,
     )
-    organization_id: Mapped[uuid.UUID] = mapped_column(
+    organization_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("organizations.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,   # NULL for independent doctors who have no organization
         index=True,
     )
     day_of_week: Mapped[int] = mapped_column(

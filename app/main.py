@@ -79,6 +79,9 @@ from app.routers.booking import router as booking_router
 from app.routers.patient_reports import router as patient_reports_router
 from app.routers.admin import router as admin_router
 from app.routers.ai import router as ai_router
+from app.routers.doctor_auth import router as doctor_auth_router
+from app.routers.doctor_dashboard import router as doctor_dashboard_router
+from app.routers.doctors_public import router as doctors_public_router
 
 
 def create_app() -> FastAPI:
@@ -122,6 +125,10 @@ def create_app() -> FastAPI:
         prefix="/api/v1",
         tags=["Organizations"],
     )
+    # doctors_public MUST be included before doctor_router: static paths /search and
+    # /specialties must be registered before the /{doctor_id} pattern or FastAPI
+    # will swallow them as doctor_id="search" / doctor_id="specialties".
+    app.include_router(doctors_public_router, prefix="/api/v1/doctors", tags=["Doctors Public"])
     app.include_router(doctor_router, prefix="/api/v1")
     app.include_router(patient_router, prefix="/api/v1")
     app.include_router(patient_auth_router, prefix="/api/v1")
@@ -134,6 +141,8 @@ def create_app() -> FastAPI:
     app.include_router(patient_reports_router, prefix="/api/v1")
     app.include_router(admin_router, prefix="/api/v1")
     app.include_router(ai_router, prefix="/api/v1")
+    app.include_router(doctor_auth_router, prefix="/api/v1/doctor", tags=["Doctor Auth"])
+    app.include_router(doctor_dashboard_router, prefix="/api/v1/doctor", tags=["Doctor Dashboard"])
 
     return app
 

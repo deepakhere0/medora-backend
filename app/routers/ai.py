@@ -1,6 +1,8 @@
+import base64
 import json
 import traceback
 from datetime import date
+from typing import Optional
 
 from groq import Groq
 from google import genai
@@ -63,9 +65,58 @@ OTHER RULES:
 - ONLY output valid JSON. No markdown, no backticks, no explanation outside the JSON."""
 
 
+REPORT_ANALYSIS_PROMPT = """You are Medora AI, a helpful and professional medical report analyzer.
+
+TASK: Analyze the uploaded medical report image and explain the findings clearly.
+
+RULES:
+- Identify the type of report (blood test, X-ray, MRI, urine test, etc.)
+- List each parameter/finding with its value and whether it is NORMAL, HIGH, or LOW
+- Explain what abnormal values might indicate in simple, easy-to-understand language
+- If the user asked a specific question about the report, answer that directly
+- Do NOT invent or fabricate any data — only analyze what is visible in the image
+- Keep medical terms but always add a simple explanation in parentheses
+- If the image is unclear or not a medical report, say so honestly
+
+LANGUAGE RULES (same as main chat):
+- If user writes in English → reply in professional English
+- If user writes in Hinglish → reply in Hinglish
+- If user writes in Hindi → reply in Hindi Devanagari
+- Medicine/parameter names always in English
+
+RESPONSE FORMAT — respond ONLY in this JSON structure, no markdown, no backticks:
+{
+    "report_type": "Type of medical report identified",
+    "summary": "A 2-3 sentence plain-language overview of the report",
+    "findings": [
+        {
+            "parameter": "Parameter name",
+            "value": "Value shown in report",
+            "status": "NORMAL / HIGH / LOW / ABNORMAL",
+            "explanation": "What this means in simple language"
+        }
+    ],
+    "concerns": ["List of any values that need attention"],
+    "recommendations": "General advice based on the findings",
+    "disclaimer": "This is an AI-powered analysis by Medora AI. Please consult a verified Medora doctor for official diagnosis and treatment."
+}
+
+If the image is NOT a medical report, respond with:
+{
+    "report_type": "Not a medical report",
+    "summary": "The uploaded image does not appear to be a medical report.",
+    "findings": [],
+    "concerns": [],
+    "recommendations": "Please upload a clear image of your medical report (blood test, X-ray, prescription, etc.)",
+    "disclaimer": "This is an AI-powered analysis by Medora AI. Please consult a verified Medora doctor for official diagnosis and treatment."
+}"""
+
+
 class SymptomCheckRequest(BaseModel):
     message: str
     language: str = "auto"
+    image_base64: Optional[str] = None   # Base64-encoded image string (no data:image prefix)
+    mime_type: Optional[str] = None      # "image/png", "image/jpeg", etc.
 
 
 async def _check_and_update_rate_limit(patient: Patient, db: AsyncSession) -> bool:
@@ -90,6 +141,24 @@ def _parse_ai_response(raw: str) -> dict:
         return json.loads(cleaned)
     except json.JSONDecodeError:
         return {"is_general": True, "message": raw}
+
+
+def _parse_report_response(raw_text: str) -> dict:
+    cleaned = raw_text.replace("```json", "").replace("```", "").strip()
+    try:
+        parsed = json.loads(cleaned)
+        parsed["is_report_analysis"] = True
+        return parsed
+    except json.JSONDecodeError:
+        return {
+            "is_report_analysis": True,
+            "report_type": "Analysis",
+            "summary": raw_text,
+            "findings": [],
+            "concerns": [],
+            "recommendations": "",
+            "disclaimer": "This is an AI-powered analysis by Medora AI. Please consult a verified Medora doctor for official diagnosis and treatment.",
+        }
 
 
 async def _find_matching_doctors(specialist_type: str, org_id, db: AsyncSession) -> list:
@@ -134,7 +203,38 @@ async def symptom_check(
 
     remaining = DAILY_AI_LIMIT - current_patient.ai_calls_today
 
-    # --- Primary: Gemini ---
+    has_image = bool(request.image_base64 and request.mime_type)
+
+    # --- Image analysis path: Gemini Vision only, no Groq fallback ---
+    if has_image:
+        try:
+            user_text = request.message if request.message else "Analyze this medical report and explain the findings."
+            image_bytes = base64.b64decode(request.image_base64)
+            parts = [
+                genai_types.Part.from_bytes(data=image_bytes, mime_type=request.mime_type),
+                genai_types.Part.from_text(text=user_text),
+            ]
+            response = _gemini_client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=parts,
+                config=genai_types.GenerateContentConfig(
+                    system_instruction=REPORT_ANALYSIS_PROMPT,
+                    max_output_tokens=2000,
+                ),
+            )
+            parsed_report = _parse_report_response(response.text)
+            return {"success": True, "data": parsed_report, "remaining_calls": remaining}
+
+        except Exception as img_err:
+            traceback.print_exc()
+            print(f"GEMINI VISION ERROR: {type(img_err).__name__}: {img_err}")
+            return {
+                "success": False,
+                "error": "Image analysis is temporarily unavailable. Please try again shortly or describe your symptoms in text.",
+                "remaining_calls": remaining,
+            }
+
+    # --- Primary: Gemini (text-only) ---
     try:
         response = _gemini_client.models.generate_content(
             model="gemini-2.0-flash",
@@ -165,7 +265,7 @@ async def symptom_check(
         traceback.print_exc()
         print(f"GEMINI ERROR: {type(gemini_err).__name__}: {gemini_err}")
 
-    # --- Fallback: Groq (Llama 3) ---
+    # --- Fallback: Groq (Llama 3) — text-only requests only ---
     try:
         fb_response = _groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",

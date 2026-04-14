@@ -12,6 +12,7 @@ class UserRole(str, enum.Enum):
     super_admin = "super_admin"
     org_admin = "org_admin"
     patient = "patient"
+    doctor = "doctor"
 
 
 class User(BaseModel):

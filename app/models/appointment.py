@@ -116,3 +116,9 @@ class Appointment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     medical_histories: Mapped[list["MedicalHistory"]] = relationship(
         "MedicalHistory", back_populates="appointment", lazy="noload"
     )
+    reviews: Mapped[list["Review"]] = relationship(
+        "Review", back_populates="appointment", lazy="noload"
+    )
+    online_consultations: Mapped[list["OnlineConsultation"]] = relationship(
+        "OnlineConsultation", back_populates="appointment", lazy="noload"
+    )

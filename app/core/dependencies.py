@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.doctor import Doctor
 from app.models.organization import Organization
 from app.models.patient import Patient
 from app.models.user import User, UserRole
@@ -102,6 +103,38 @@ async def get_current_patient(
         raise exc
 
     return patient
+
+
+async def get_current_doctor(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Doctor:
+    """
+    Dependency for authenticated doctor endpoints.
+
+    Validates that the JWT belongs to a user with role='doctor' and that the
+    linked Doctor record exists.  Use alongside get_current_user when you also
+    need the User object in the same endpoint — FastAPI caches dependencies
+    within a request so get_current_user is called only once.
+    """
+    if current_user.role != UserRole.doctor:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to perform this action",
+        )
+
+    result = await db.execute(
+        select(Doctor).where(Doctor.user_id == current_user.id)
+    )
+    doctor = result.scalar_one_or_none()
+
+    if doctor is None or not doctor.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Doctor profile not found",
+        )
+
+    return doctor
 
 
 def require_role(required_role: UserRole):
