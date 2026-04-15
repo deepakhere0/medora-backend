@@ -8,6 +8,7 @@ from app.db.session import get_db
 from app.models.patient import Patient
 from app.schemas.patient_dashboard import (
     PatientAppointmentsResponse,
+    PatientConsultationsResponse,
     PatientDashboardResponse,
     PatientProfile,
     PatientProfileUpdate,
@@ -17,6 +18,7 @@ from app.schemas.patient_dashboard import (
 from app.services.patient_dashboard_service import (
     cancel_patient_appointment,
     get_patient_appointments,
+    get_patient_consultations,
     get_patient_dashboard,
     get_patient_profile,
     reschedule_patient_appointment,
@@ -68,6 +70,42 @@ async def patient_appointments(
         limit=limit,
     )
     return {"appointments": appointments, "total": total}
+
+
+@router.get(
+    "/consultations",
+    response_model=PatientConsultationsResponse,
+    summary="Patient's online consultations",
+    description=(
+        "Returns paginated online consultations for the authenticated patient. "
+        "Filter by status: upcoming (scheduled/in_progress) | completed | cancelled | all. "
+        "Filter by type: video | audio | chat | all."
+    ),
+)
+async def patient_consultations(
+    status: str = Query(default="all", description="upcoming | completed | cancelled | all"),
+    type: str = Query(default="all", description="video | audio | chat | all"),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=20, ge=1, le=100),
+    current_patient: Patient = Depends(get_current_patient),
+    db: AsyncSession = Depends(get_db),
+):
+    consultations, total = await get_patient_consultations(
+        db,
+        patient_id=current_patient.id,
+        status_filter=status,
+        consultation_type_filter=type,
+        page=page,
+        per_page=per_page,
+    )
+    total_pages = max(1, -(-total // per_page))
+    return PatientConsultationsResponse(
+        consultations=consultations,
+        total=total,
+        page=page,
+        per_page=per_page,
+        total_pages=total_pages,
+    )
 
 
 @router.put("/appointments/{appointment_id}/reschedule", response_model=RescheduleResponse)

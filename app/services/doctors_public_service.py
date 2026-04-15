@@ -240,20 +240,22 @@ async def search_doctors(
     # Pagination
     # ------------------------------------------------------------------
     stmt = stmt.offset((page - 1) * per_page).limit(per_page)
-    rows = (await db.execute(stmt)).all()
 
     # ------------------------------------------------------------------
     # Shape results
     # ------------------------------------------------------------------
     doctors_out = []
-    for row in rows:
-        if use_location:
-            doctor, distance_km = row[0], row[1]
-        else:
-            doctor = row[0] if isinstance(row, tuple) else row
-            distance_km = None
-
-        doctors_out.append(_doctor_to_search_item(doctor, distance_km))
+    if use_location:
+        # select(Doctor, haversine) → Row[Doctor, float]; use integer indexing
+        rows = (await db.execute(stmt)).all()
+        for row in rows:
+            doctor, dist = row[0], row[1]
+            doctors_out.append(_doctor_to_search_item(doctor, dist))
+    else:
+        # select(Doctor) → use .scalars() to get plain Doctor ORM instances
+        doctors = (await db.execute(stmt)).scalars().all()
+        for doctor in doctors:
+            doctors_out.append(_doctor_to_search_item(doctor, None))
 
     return {
         "doctors": doctors_out,

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.appointment import Appointment
 from app.models.doctor import Doctor
 from app.models.doctor_schedule import DoctorSchedule
+from app.models.online_consultation import OnlineConsultation
 from app.models.organization import Organization
 from app.models.patient import Patient
 from app.models.patient_organization import PatientOrganization
@@ -361,6 +362,65 @@ async def reschedule_patient_appointment(
         "status": appointment.status,
         "notes": appointment.notes,
     }
+
+
+async def get_patient_consultations(
+    db: AsyncSession,
+    patient_id: UUID,
+    status_filter: str = "all",
+    consultation_type_filter: str = "all",
+    page: int = 1,
+    per_page: int = 20,
+) -> tuple[list, int]:
+    """Return paginated online consultations for the authenticated patient."""
+    from datetime import timezone
+
+    base = (
+        select(OnlineConsultation, Doctor)
+        .join(Doctor, Doctor.id == OnlineConsultation.doctor_id)
+        .where(OnlineConsultation.patient_id == patient_id)
+    )
+
+    if status_filter == "upcoming":
+        base = base.where(
+            OnlineConsultation.status.in_(["scheduled", "in_progress"])
+        )
+    elif status_filter == "completed":
+        base = base.where(OnlineConsultation.status == "completed")
+    elif status_filter != "all":
+        base = base.where(OnlineConsultation.status == status_filter)
+
+    if consultation_type_filter != "all":
+        base = base.where(OnlineConsultation.consultation_type == consultation_type_filter)
+
+    count_query = select(func.count()).select_from(base.subquery())
+    total: int = (await db.execute(count_query)).scalar() or 0
+
+    offset = (page - 1) * per_page
+    rows = (
+        await db.execute(
+            base.order_by(OnlineConsultation.scheduled_at.desc()).offset(offset).limit(per_page)
+        )
+    ).all()
+
+    consultations = [
+        {
+            "id": consult.id,
+            "doctor_id": consult.doctor_id,
+            "doctor_name": doctor.name,
+            "doctor_specialty": doctor.specialty or doctor.specialization,
+            "doctor_photo_url": doctor.profile_photo_url or doctor.photo_url,
+            "scheduled_at": consult.scheduled_at,
+            "status": consult.status,
+            "consultation_type": consult.consultation_type,
+            "duration_minutes": consult.duration_minutes,
+            "consultation_fee": consult.consultation_fee,
+            "payment_status": consult.payment_status,
+        }
+        for consult, doctor in rows
+    ]
+
+    return consultations, total
 
 
 async def cancel_patient_appointment(

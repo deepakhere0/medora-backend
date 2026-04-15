@@ -1,4 +1,5 @@
-from datetime import date, time
+from datetime import date, datetime, time
+from decimal import Decimal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -95,3 +96,29 @@ class PatientDashboardResponse(BaseModel):
     upcoming_appointments: list[PatientAppointmentBrief]
     total_appointments: int
     total_reports: int
+
+
+# ---------------------------------------------------------------------------
+# Online consultations
+# ---------------------------------------------------------------------------
+
+class PatientConsultationItem(BaseModel):
+    id: UUID
+    doctor_id: UUID
+    doctor_name: str
+    doctor_specialty: str | None
+    doctor_photo_url: str | None
+    scheduled_at: datetime
+    status: str          # scheduled | in_progress | completed | cancelled | no_show
+    consultation_type: str  # video | audio | chat
+    duration_minutes: int | None
+    consultation_fee: Decimal
+    payment_status: str
+
+
+class PatientConsultationsResponse(BaseModel):
+    consultations: list[PatientConsultationItem]
+    total: int
+    page: int
+    per_page: int
+    total_pages: int

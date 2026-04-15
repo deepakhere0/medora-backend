@@ -64,6 +64,11 @@ async def _backfill_doctor_schedules() -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await _backfill_doctor_schedules()
+    # Log all registered routes at startup to help verify registration
+    for route in app.routes:
+        if hasattr(route, "methods"):
+            methods = ",".join(sorted(route.methods))
+            logger.info("ROUTE  %-30s  %s", methods, route.path)
     yield
 from app.routers.organization import router as organization_router
 from app.routers.users import router as users_router
