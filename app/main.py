@@ -101,14 +101,9 @@ def create_app() -> FastAPI:
     # ---------------------------------------------------------------------------
     # Middleware
     # ---------------------------------------------------------------------------
-    # Expo dev server uses ports 8081-8090 and 19006
-    _localhost_dev = [
-        f"http://localhost:{p}" for p in [3000, 8081, 8082, 8083, 8084, 8085, 8086, 19006]
-    ] + [
-        f"http://127.0.0.1:{p}" for p in [3000, 8081, 8082, 8083, 8084, 8085, 8086, 19006]
-    ]
     _origins = [
-        *_localhost_dev,
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
         "https://medorahealth.in",
         "https://www.medorahealth.in",
         "https://medora-frontend.vercel.app",
