@@ -101,19 +101,27 @@ def create_app() -> FastAPI:
     # ---------------------------------------------------------------------------
     # Middleware
     # ---------------------------------------------------------------------------
-    _origins = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://medorahealth.in",
-        "https://www.medorahealth.in",
-        "https://medora-frontend.vercel.app",
-    ]
-    _extra = os.getenv("CORS_ORIGINS", "").split(",")
-    origins = [o.strip() for o in _origins + _extra if o.strip()]
-
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins,
+        allow_origins=[
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://localhost:8080",
+            "http://localhost:8081",
+            "http://localhost:8082",
+            "http://localhost:8083",
+            "http://localhost:8084",
+            "http://localhost:8085",
+            "http://localhost:8090",
+            "http://localhost:19006",
+            "http://127.0.0.1:3000",
+            "https://medorahealth.in",
+            "https://www.medorahealth.in",
+            "https://medora-frontend.vercel.app",
+            "https://medora-web.vercel.app",
+            "https://medora.vercel.app",
+        ],
+        allow_origin_regex=r"https?://localhost:\d+",
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
