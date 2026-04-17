@@ -370,29 +370,43 @@ async def book_appointment(
     patient_id: UUID,
     data: BookAppointmentRequest,
 ) -> BookAppointmentResponse:
-    # 1. Validate organization
-    org_result = await db.execute(
-        select(Organization).where(Organization.id == data.organization_id)
-    )
-    org = org_result.scalar_one_or_none()
-    if org is None or not org.is_approved:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Organization not found or not approved",
+    # 1. Resolve organization_id from doctor record if not provided
+    org_id = data.organization_id
+    if org_id is None:
+        doc_lookup = await db.execute(
+            select(Doctor).where(Doctor.id == data.doctor_id)
         )
+        d = doc_lookup.scalar_one_or_none()
+        if d is not None and d.organization_id is not None:
+            org_id = d.organization_id
 
-    # 2. Validate doctor
-    doc_result = await db.execute(
+    # 2. Validate organization (only if we have one)
+    org: Organization | None = None
+    if org_id is not None:
+        org_result = await db.execute(
+            select(Organization).where(Organization.id == org_id)
+        )
+        org = org_result.scalar_one_or_none()
+        if org is None or not org.is_approved:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organization not found or not approved",
+            )
+
+    # 3. Validate doctor
+    doc_query = (
         select(Doctor)
         .where(Doctor.id == data.doctor_id)
-        .where(Doctor.organization_id == data.organization_id)
         .where(Doctor.is_active == True)
     )
+    if org_id is not None:
+        doc_query = doc_query.where(Doctor.organization_id == org_id)
+    doc_result = await db.execute(doc_query)
     doctor = doc_result.scalar_one_or_none()
     if doctor is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Doctor not found in this organization",
+            detail="Doctor not found or not available",
         )
 
     # 3. Parse start_time string → time object
@@ -463,7 +477,7 @@ async def book_appointment(
     appointment = Appointment(
         patient_id=patient_id,
         doctor_id=data.doctor_id,
-        organization_id=data.organization_id,
+        organization_id=org_id,
         appointment_date=data.appointment_date,
         start_time=slot_start,
         end_time=slot_end,
@@ -480,23 +494,24 @@ async def book_appointment(
     )
     db.add(appointment)
 
-    # 10. Link patient ↔ organization (first booking creates the association)
-    link_result = await db.execute(
-        select(PatientOrganization)
-        .where(PatientOrganization.patient_id == patient_id)
-        .where(PatientOrganization.organization_id == data.organization_id)
-    )
-    existing_link = link_result.scalar_one_or_none()
-    if existing_link is None:
-        db.add(
-            PatientOrganization(
-                patient_id=patient_id,
-                organization_id=data.organization_id,
-                is_active=True,
-            )
+    # 10. Link patient ↔ organization (only when org exists)
+    if org_id is not None:
+        link_result = await db.execute(
+            select(PatientOrganization)
+            .where(PatientOrganization.patient_id == patient_id)
+            .where(PatientOrganization.organization_id == org_id)
         )
-    elif not existing_link.is_active:
-        existing_link.is_active = True
+        existing_link = link_result.scalar_one_or_none()
+        if existing_link is None:
+            db.add(
+                PatientOrganization(
+                    patient_id=patient_id,
+                    organization_id=org_id,
+                    is_active=True,
+                )
+            )
+        elif not existing_link.is_active:
+            existing_link.is_active = True
 
     # Clear booking draft on successful booking
     patient_result = await db.execute(select(Patient).where(Patient.id == patient_id))
@@ -504,19 +519,20 @@ async def book_appointment(
     if patient is not None and patient.booking_draft is not None:
         patient.booking_draft = None
 
-    # Create notification for the organization dashboard
-    patient_display = data.guest_name if data.booking_for == "someone_else" and data.guest_name else (
-        patient.name if patient else "Unknown"
-    )
-    db.add(Notification(
-        organization_id=data.organization_id,
-        title="New Appointment Booked",
-        message=(
-            f"Patient {patient_display} booked with Dr. {doctor.name} "
-            f"on {data.appointment_date.strftime('%b %d, %Y')} at {slot_start.strftime('%H:%M')}"
-        ),
-        type="info",
-    ))
+    # Create notification for the organization dashboard (skip for independent doctors)
+    if org_id is not None:
+        patient_display = data.guest_name if data.booking_for == "someone_else" and data.guest_name else (
+            patient.name if patient else "Unknown"
+        )
+        db.add(Notification(
+            organization_id=org_id,
+            title="New Appointment Booked",
+            message=(
+                f"Patient {patient_display} booked with Dr. {doctor.name} "
+                f"on {data.appointment_date.strftime('%b %d, %Y')} at {slot_start.strftime('%H:%M')}"
+            ),
+            type="info",
+        ))
 
     await db.commit()
     await db.refresh(appointment)
@@ -525,10 +541,10 @@ async def book_appointment(
     return BookAppointmentResponse(
         id=appointment.id,
         booking_id=appointment.booking_id,
-        organization_name=org.name,
-        hospital_address=org.address,
-        hospital_city=org.city,
-        hospital_state=org.state,
+        organization_name=org.name if org else None,
+        hospital_address=org.address if org else None,
+        hospital_city=org.city if org else None,
+        hospital_state=org.state if org else None,
         doctor_name=doctor.name,
         doctor_specialization=doctor.specialization,
         appointment_date=appointment.appointment_date,

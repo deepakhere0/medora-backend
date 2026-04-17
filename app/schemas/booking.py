@@ -83,7 +83,7 @@ class WeekSlotsResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 class BookAppointmentRequest(BaseModel):
-    organization_id: UUID
+    organization_id: UUID | None = None
     doctor_id: UUID
     appointment_date: date
     start_time: str       # "10:30"
@@ -99,10 +99,10 @@ class BookAppointmentRequest(BaseModel):
 class BookAppointmentResponse(BaseModel):
     id: UUID
     booking_id: str
-    organization_name: str
-    hospital_address: str | None
-    hospital_city: str
-    hospital_state: str
+    organization_name: str | None = None
+    hospital_address: str | None = None
+    hospital_city: str | None = None
+    hospital_state: str | None = None
     doctor_name: str
     doctor_specialization: str
     appointment_date: date
