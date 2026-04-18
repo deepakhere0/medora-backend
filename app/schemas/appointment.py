@@ -9,11 +9,13 @@ from app.schemas.patient import PatientGender, PatientBloodType
 
 
 class AppointmentStatus(str, enum.Enum):
+    pending = "pending"
     scheduled = "scheduled"
     confirmed = "confirmed"
     in_progress = "in_progress"
     completed = "completed"
     cancelled = "cancelled"
+    rejected = "rejected"
 
 
 class AppointmentType(str, enum.Enum):
@@ -149,6 +151,19 @@ class AppointmentStatsResponse(BaseModel):
     in_progress_count: int
     completed_count: int
     cancelled_count: int
+
+
+class AppointmentCancelRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str
+    note: Optional[str] = None
+
+
+class AppointmentRejectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: Optional[str] = None
 
 
 class WalkInAppointmentRequest(BaseModel):

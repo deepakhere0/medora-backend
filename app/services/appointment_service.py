@@ -1,7 +1,7 @@
 import random
 import string
 from dataclasses import dataclass
-from datetime import date, time
+from datetime import date, datetime, time, timezone
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -12,8 +12,11 @@ from app.models.appointment import Appointment, AppointmentStatus
 from app.models.doctor import Doctor
 from app.models.patient import Patient
 from app.models.patient_organization import PatientOrganization
+from app.models.user import User
 from app.schemas.appointment import (
+    AppointmentCancelRequest,
     AppointmentCreate,
+    AppointmentRejectRequest,
     AppointmentStatus as SchemaStatus,
     AppointmentStatusUpdate,
     AppointmentStatsResponse,
@@ -264,11 +267,13 @@ async def update_appointment(
 
 
 _TRANSITIONS: dict[str, list[str]] = {
-    "scheduled":   ["confirmed", "cancelled"],
+    "pending":     ["scheduled", "cancelled", "rejected"],
+    "scheduled":   ["confirmed", "in_progress", "cancelled"],
     "confirmed":   ["in_progress", "cancelled"],
     "in_progress": ["completed", "cancelled"],
     "completed":   [],
     "cancelled":   [],
+    "rejected":    [],
 }
 
 
@@ -315,6 +320,137 @@ async def cancel_appointment(
     appointment.is_active = False
 
     await db.commit()
+
+
+async def cancel_appointment_by_request(
+    db: AsyncSession,
+    appointment_id: UUID,
+    org_id: UUID,
+    payload: AppointmentCancelRequest,
+) -> Appointment:
+    appointment = await get_appointment(db, appointment_id, org_id)
+
+    if appointment.status not in ("scheduled", "confirmed"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot cancel a {appointment.status} appointment",
+        )
+
+    appointment.status = "cancelled"
+    appointment.cancellation_reason = payload.reason
+    appointment.cancel_note = payload.note
+    appointment.cancelled_at = datetime.now(timezone.utc)
+
+    await db.commit()
+    await db.refresh(appointment)
+    return appointment
+
+
+async def _get_doctor_for_user(db: AsyncSession, user: User) -> Doctor:
+    result = await db.execute(
+        select(Doctor).where(Doctor.user_id == user.id, Doctor.is_active.is_(True))
+    )
+    doctor = result.scalar_one_or_none()
+    if doctor is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No active doctor profile linked to your account",
+        )
+    return doctor
+
+
+async def confirm_appointment(
+    db: AsyncSession,
+    appointment_id: UUID,
+    current_user: User,
+) -> Appointment:
+    doctor = await _get_doctor_for_user(db, current_user)
+
+    result = await db.execute(
+        select(Appointment).where(
+            Appointment.id == appointment_id,
+            Appointment.is_active.is_(True),
+        )
+    )
+    appt = result.scalar_one_or_none()
+    if appt is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+    if appt.doctor_id != doctor.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the assigned doctor can confirm")
+    if appt.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot confirm appointment in status '{appt.status}'",
+        )
+
+    appt.status = "scheduled"
+    appt.confirmed_at = datetime.now(timezone.utc)
+    await db.commit()
+    await db.refresh(appt)
+    return appt
+
+
+async def reject_appointment(
+    db: AsyncSession,
+    appointment_id: UUID,
+    current_user: User,
+    payload: AppointmentRejectRequest,
+) -> Appointment:
+    doctor = await _get_doctor_for_user(db, current_user)
+
+    result = await db.execute(
+        select(Appointment).where(
+            Appointment.id == appointment_id,
+            Appointment.is_active.is_(True),
+        )
+    )
+    appt = result.scalar_one_or_none()
+    if appt is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+    if appt.doctor_id != doctor.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the assigned doctor can reject")
+    if appt.status != "pending":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot reject appointment in status '{appt.status}'",
+        )
+
+    appt.status = "rejected"
+    appt.rejected_at = datetime.now(timezone.utc)
+    appt.rejection_reason = payload.reason
+    await db.commit()
+    await db.refresh(appt)
+    return appt
+
+
+async def complete_appointment(
+    db: AsyncSession,
+    appointment_id: UUID,
+    current_user: User,
+) -> Appointment:
+    doctor = await _get_doctor_for_user(db, current_user)
+
+    result = await db.execute(
+        select(Appointment).where(
+            Appointment.id == appointment_id,
+            Appointment.is_active.is_(True),
+        )
+    )
+    appt = result.scalar_one_or_none()
+    if appt is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+    if appt.doctor_id != doctor.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the assigned doctor can mark complete")
+    if appt.status != "scheduled":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot complete appointment in status '{appt.status}'",
+        )
+
+    appt.status = "completed"
+    await db.commit()
+    await db.refresh(appt)
+    return appt
 
 
 def _generate_booking_id() -> str:

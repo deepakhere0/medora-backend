@@ -8,10 +8,12 @@ from app.core.dependencies import require_role
 from app.db.session import get_db
 from app.models.user import User, UserRole
 from app.schemas.appointment import (
+    AppointmentCancelRequest,
     AppointmentCreate,
     AppointmentListResponse,
     AppointmentRead,
     AppointmentListItem,
+    AppointmentRejectRequest,
     AppointmentStatus as SchemaStatus,
     AppointmentStatusUpdate,
     AppointmentStatsResponse,
@@ -22,11 +24,15 @@ from app.schemas.appointment import (
 from app.services.appointment_service import (
     AppointmentRow,
     cancel_appointment,
+    cancel_appointment_by_request,
+    complete_appointment,
+    confirm_appointment,
     create_appointment,
     create_walkin_appointment,
     get_appointment,
     get_appointment_stats,
     list_appointments,
+    reject_appointment,
     update_appointment,
     update_appointment_status,
 )
@@ -177,6 +183,61 @@ async def update_status_endpoint(
 ) -> AppointmentRead:
     org_id = _get_org_id(current_user)
     return await update_appointment_status(db, appointment_id, org_id, data)
+
+
+@router.patch(
+    "/{appointment_id}/cancel",
+    response_model=AppointmentRead,
+    status_code=status.HTTP_200_OK,
+)
+async def cancel_appointment_endpoint(
+    appointment_id: UUID,
+    payload: AppointmentCancelRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.org_admin)),
+) -> AppointmentRead:
+    org_id = _get_org_id(current_user)
+    return await cancel_appointment_by_request(db, appointment_id, org_id, payload)
+
+
+@router.patch(
+    "/{appointment_id}/confirm",
+    response_model=AppointmentRead,
+    status_code=status.HTTP_200_OK,
+)
+async def confirm_appointment_endpoint(
+    appointment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.doctor)),
+) -> AppointmentRead:
+    return await confirm_appointment(db, appointment_id, current_user)
+
+
+@router.patch(
+    "/{appointment_id}/reject",
+    response_model=AppointmentRead,
+    status_code=status.HTTP_200_OK,
+)
+async def reject_appointment_endpoint(
+    appointment_id: UUID,
+    payload: AppointmentRejectRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.doctor)),
+) -> AppointmentRead:
+    return await reject_appointment(db, appointment_id, current_user, payload)
+
+
+@router.patch(
+    "/{appointment_id}/complete",
+    response_model=AppointmentRead,
+    status_code=status.HTTP_200_OK,
+)
+async def complete_appointment_endpoint(
+    appointment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.doctor)),
+) -> AppointmentRead:
+    return await complete_appointment(db, appointment_id, current_user)
 
 
 @router.delete(

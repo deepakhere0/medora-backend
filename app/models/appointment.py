@@ -1,8 +1,8 @@
 import enum
 import uuid
-from datetime import date, time
+from datetime import date, datetime, time
 
-from sqlalchemy import Boolean, Date, ForeignKey, Index, Integer, String, Text, Time
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, Integer, String, Text, Time
 from sqlalchemy.dialects.postgresql import ENUM as PgENUM, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,11 +11,13 @@ from app.models.base import TimestampMixin, UUIDPrimaryKeyMixin
 
 
 class AppointmentStatus(str, enum.Enum):
+    pending = "pending"
     scheduled = "scheduled"
     confirmed = "confirmed"
     in_progress = "in_progress"
     completed = "completed"
     cancelled = "cancelled"
+    rejected = "rejected"
 
 
 class AppointmentType(str, enum.Enum):
@@ -24,11 +26,13 @@ class AppointmentType(str, enum.Enum):
 
 
 appointment_status_enum = PgENUM(
+    "pending",
     "scheduled",
     "confirmed",
     "in_progress",
     "completed",
     "cancelled",
+    "rejected",
     name="appointment_status",
     create_type=False,
 )
@@ -92,6 +96,11 @@ class Appointment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     booking_id: Mapped[str | None] = mapped_column(String(20), nullable=True, unique=True, index=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     cancellation_reason: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    cancel_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String, nullable=True)
     token_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     booking_for: Mapped[str] = mapped_column(String, nullable=False, default="self", server_default="self")

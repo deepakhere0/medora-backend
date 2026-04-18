@@ -461,7 +461,7 @@ async def book_appointment(
         .where(Appointment.doctor_id == data.doctor_id)
         .where(Appointment.appointment_date == data.appointment_date)
         .where(Appointment.start_time == slot_start)
-        .where(Appointment.status.not_in(["cancelled"]))
+        .where(Appointment.status.not_in(["cancelled", "rejected"]))
         .where(Appointment.is_active == True)
     )
     if conflict_result.scalar_one_or_none() is not None:
@@ -481,7 +481,7 @@ async def book_appointment(
         appointment_date=data.appointment_date,
         start_time=slot_start,
         end_time=slot_end,
-        status="scheduled",
+        status="pending",
         appointment_type="scheduled",
         booking_id=booking_id,
         notes=data.notes,
