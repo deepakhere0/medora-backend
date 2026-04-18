@@ -519,11 +519,12 @@ async def book_appointment(
     if patient is not None and patient.booking_draft is not None:
         patient.booking_draft = None
 
-    # Create notification for the organization dashboard (skip for independent doctors)
+    # Create notifications (skip for independent doctors — org_id required by Notification)
     if org_id is not None:
         patient_display = data.guest_name if data.booking_for == "someone_else" and data.guest_name else (
             patient.name if patient else "Unknown"
         )
+        # Org-level notification (existing — for org dashboard)
         db.add(Notification(
             organization_id=org_id,
             title="New Appointment Booked",
@@ -533,6 +534,20 @@ async def book_appointment(
             ),
             type="info",
         ))
+        # Doctor-targeted notification (for doctor bell badge)
+        if doctor.user_id is not None:
+            db.add(Notification(
+                organization_id=org_id,
+                title="New Appointment Request",
+                message=(
+                    f"{patient_display} requested an appointment "
+                    f"on {data.appointment_date.strftime('%b %d, %Y')} at {slot_start.strftime('%H:%M')}"
+                ),
+                type="new_appointment",
+                recipient_user_id=doctor.user_id,
+                related_entity_type="appointment",
+                related_entity_id=appointment.id,
+            ))
 
     await db.commit()
     await db.refresh(appointment)

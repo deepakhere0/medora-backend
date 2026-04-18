@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointment import Appointment, AppointmentStatus
 from app.models.doctor import Doctor
+from app.models.notification import Notification
 from app.models.patient import Patient
 from app.models.patient_organization import PatientOrganization
 from app.models.user import User
@@ -342,6 +343,27 @@ async def cancel_appointment_by_request(
     appointment.cancel_note = payload.note
     appointment.cancelled_at = datetime.now(timezone.utc)
 
+    # Notify the assigned doctor that the patient cancelled
+    if appointment.organization_id is not None:
+        doctor_result = await db.execute(
+            select(Doctor.user_id).where(Doctor.id == appointment.doctor_id)
+        )
+        doctor_user_id = doctor_result.scalar_one_or_none()
+        if doctor_user_id is not None:
+            db.add(Notification(
+                organization_id=appointment.organization_id,
+                title="Appointment Cancelled",
+                message=(
+                    f"A patient cancelled their appointment on "
+                    f"{appointment.appointment_date.strftime('%b %d, %Y')} "
+                    f"at {appointment.start_time.strftime('%H:%M')}."
+                ),
+                type="appointment_cancelled",
+                recipient_user_id=doctor_user_id,
+                related_entity_type="appointment",
+                related_entity_id=appointment.id,
+            ))
+
     await db.commit()
     await db.refresh(appointment)
     return appointment
@@ -386,6 +408,21 @@ async def confirm_appointment(
 
     appt.status = "scheduled"
     appt.confirmed_at = datetime.now(timezone.utc)
+
+    if appt.organization_id is not None:
+        db.add(Notification(
+            organization_id=appt.organization_id,
+            title="Appointment Confirmed",
+            message=(
+                f"Your appointment on {appt.appointment_date.strftime('%b %d, %Y')} "
+                f"at {appt.start_time.strftime('%H:%M')} has been confirmed."
+            ),
+            type="appointment_confirmed",
+            recipient_patient_id=appt.patient_id,
+            related_entity_type="appointment",
+            related_entity_id=appt.id,
+        ))
+
     await db.commit()
     await db.refresh(appt)
     return appt
@@ -419,6 +456,22 @@ async def reject_appointment(
     appt.status = "rejected"
     appt.rejected_at = datetime.now(timezone.utc)
     appt.rejection_reason = payload.reason
+
+    if appt.organization_id is not None:
+        reason_suffix = f" Reason: {payload.reason}" if payload.reason else ""
+        db.add(Notification(
+            organization_id=appt.organization_id,
+            title="Appointment Request Declined",
+            message=(
+                f"Your appointment request for {appt.appointment_date.strftime('%b %d, %Y')} "
+                f"at {appt.start_time.strftime('%H:%M')} was declined.{reason_suffix}"
+            ),
+            type="appointment_rejected",
+            recipient_patient_id=appt.patient_id,
+            related_entity_type="appointment",
+            related_entity_id=appt.id,
+        ))
+
     await db.commit()
     await db.refresh(appt)
     return appt

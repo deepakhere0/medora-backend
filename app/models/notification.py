@@ -27,3 +27,19 @@ class Notification(UUIDPrimaryKeyMixin, Base):
         server_default=func.now(),
         nullable=False,
     )
+    # Per-recipient routing — nullable so org-level notifications still work
+    recipient_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    recipient_patient_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("patients.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
+    # Soft link to the triggering entity (no FK — type + id pair)
+    related_entity_type: Mapped[str | None] = mapped_column(String, nullable=True)
+    related_entity_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)

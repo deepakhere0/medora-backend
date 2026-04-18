@@ -87,6 +87,7 @@ from app.routers.ai import router as ai_router
 from app.routers.doctor_auth import router as doctor_auth_router
 from app.routers.doctor_dashboard import router as doctor_dashboard_router
 from app.routers.doctors_public import router as doctors_public_router
+from app.routers.notifications import router as notifications_router
 
 
 def create_app() -> FastAPI:
@@ -156,6 +157,7 @@ def create_app() -> FastAPI:
     app.include_router(ai_router, prefix="/api/v1")
     app.include_router(doctor_auth_router, prefix="/api/v1/doctor", tags=["Doctor Auth"])
     app.include_router(doctor_dashboard_router, prefix="/api/v1/doctor", tags=["Doctor Dashboard"])
+    app.include_router(notifications_router, prefix="/api/v1")
 
     return app
 
