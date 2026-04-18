@@ -30,7 +30,12 @@
       "Bash(pkill -f \"uvicorn app.main:app\")",
       "Bash(xargs grep:*)",
       "Bash(.venv/Scripts/pip freeze:*)",
-      "Bash(.venv/Scripts/alembic current:*)"
+      "Bash(.venv/Scripts/alembic current:*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__claude_ai_Supabase__apply_migration"
     ]
   }
 }
