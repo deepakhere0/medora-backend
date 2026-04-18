@@ -18,6 +18,8 @@ from app.schemas.appointment import (
     AppointmentStatusUpdate,
     AppointmentStatsResponse,
     AppointmentUpdate,
+    DoctorAppointmentItem,
+    DoctorPendingCountResponse,
     WalkInAppointmentRequest,
     WalkInAppointmentResponse,
 )
@@ -31,6 +33,9 @@ from app.services.appointment_service import (
     create_walkin_appointment,
     get_appointment,
     get_appointment_stats,
+    get_doctor_pending_appointments,
+    get_doctor_pending_count,
+    get_doctor_today_appointments,
     list_appointments,
     reject_appointment,
     update_appointment,
@@ -50,6 +55,43 @@ def _get_org_id(current_user: User) -> UUID:
             detail="Your organization is not set up yet",
         )
     return current_user.organization_id
+
+
+@router.get(
+    "/doctor/pending/count",
+    response_model=DoctorPendingCountResponse,
+    status_code=status.HTTP_200_OK,
+)
+async def doctor_pending_count(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.doctor)),
+) -> DoctorPendingCountResponse:
+    count = await get_doctor_pending_count(db, current_user)
+    return DoctorPendingCountResponse(count=count)
+
+
+@router.get(
+    "/doctor/pending",
+    response_model=list[DoctorAppointmentItem],
+    status_code=status.HTTP_200_OK,
+)
+async def doctor_pending_appointments(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.doctor)),
+) -> list[DoctorAppointmentItem]:
+    return await get_doctor_pending_appointments(db, current_user)
+
+
+@router.get(
+    "/doctor/today",
+    response_model=list[DoctorAppointmentItem],
+    status_code=status.HTTP_200_OK,
+)
+async def doctor_today_appointments(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.doctor)),
+) -> list[DoctorAppointmentItem]:
+    return await get_doctor_today_appointments(db, current_user)
 
 
 @router.get(

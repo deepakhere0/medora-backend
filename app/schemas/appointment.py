@@ -166,6 +166,41 @@ class AppointmentRejectRequest(BaseModel):
     reason: Optional[str] = None
 
 
+class DoctorAppointmentItem(BaseModel):
+    """Appointment item returned to doctor mobile endpoints — includes patient avatar."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    doctor_id: UUID
+    patient_id: UUID
+    appointment_date: date
+    start_time: time
+    end_time: time
+    appointment_type: AppointmentType
+    status: AppointmentStatus
+    token_number: int | None
+    booking_id: str | None = None
+    booking_for: str | None = None
+    guest_name: str | None = None
+    notes: str | None = None
+    rejection_reason: str | None = None
+    # Patient info (populated via JOIN)
+    patient_name: str | None = None
+    patient_phone: str | None = None
+    patient_code: str | None = None
+    patient_avatar: str | None = None
+    created_at: datetime
+
+    @computed_field
+    @property
+    def duration_minutes(self) -> int:
+        return _calc_duration(self.start_time, self.end_time)
+
+
+class DoctorPendingCountResponse(BaseModel):
+    count: int
+
+
 class WalkInAppointmentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

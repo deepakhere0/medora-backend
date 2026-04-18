@@ -21,6 +21,7 @@ from app.schemas.appointment import (
     AppointmentStatusUpdate,
     AppointmentStatsResponse,
     AppointmentUpdate,
+    DoctorAppointmentItem,
     WalkInAppointmentRequest,
     WalkInAppointmentResponse,
 )
@@ -451,6 +452,99 @@ async def complete_appointment(
     await db.commit()
     await db.refresh(appt)
     return appt
+
+
+async def _doctor_appt_query(
+    db: AsyncSession,
+    doctor_id: UUID,
+    statuses: list[str],
+    order_by,
+) -> list[DoctorAppointmentItem]:
+    rows = await db.execute(
+        select(
+            Appointment,
+            Patient.name.label("patient_name"),
+            Patient.phone.label("patient_phone"),
+            Patient.patient_code.label("patient_code"),
+            Patient.photo_url.label("patient_avatar"),
+        )
+        .outerjoin(Patient, Patient.id == Appointment.patient_id)
+        .where(
+            Appointment.doctor_id == doctor_id,
+            Appointment.status.in_(statuses),
+            Appointment.is_active.is_(True),
+        )
+        .order_by(order_by)
+    )
+
+    items: list[DoctorAppointmentItem] = []
+    for row in rows.all():
+        appt = row.Appointment
+        effective_name = (
+            appt.guest_name
+            if appt.booking_for == "someone_else" and appt.guest_name
+            else row.patient_name
+        )
+        items.append(DoctorAppointmentItem(
+            id=appt.id,
+            doctor_id=appt.doctor_id,
+            patient_id=appt.patient_id,
+            appointment_date=appt.appointment_date,
+            start_time=appt.start_time,
+            end_time=appt.end_time,
+            appointment_type=appt.appointment_type,
+            status=appt.status,
+            token_number=appt.token_number,
+            booking_id=appt.booking_id,
+            booking_for=appt.booking_for,
+            guest_name=appt.guest_name,
+            notes=appt.notes,
+            rejection_reason=appt.rejection_reason,
+            patient_name=effective_name,
+            patient_phone=row.patient_phone,
+            patient_code=row.patient_code,
+            patient_avatar=row.patient_avatar,
+            created_at=appt.created_at,
+        ))
+    return items
+
+
+async def get_doctor_pending_appointments(
+    db: AsyncSession,
+    current_user: User,
+) -> list[DoctorAppointmentItem]:
+    doctor = await _get_doctor_for_user(db, current_user)
+    return await _doctor_appt_query(
+        db, doctor.id, ["pending"], Appointment.created_at.desc()
+    )
+
+
+async def get_doctor_pending_count(
+    db: AsyncSession,
+    current_user: User,
+) -> int:
+    doctor = await _get_doctor_for_user(db, current_user)
+    result = await db.execute(
+        select(func.count(Appointment.id)).where(
+            Appointment.doctor_id == doctor.id,
+            Appointment.status == "pending",
+            Appointment.is_active.is_(True),
+        )
+    )
+    return result.scalar_one() or 0
+
+
+async def get_doctor_today_appointments(
+    db: AsyncSession,
+    current_user: User,
+) -> list[DoctorAppointmentItem]:
+    doctor = await _get_doctor_for_user(db, current_user)
+    return await _doctor_appt_query(
+        db,
+        doctor.id,
+        ["pending", "scheduled", "confirmed", "in_progress"],
+        Appointment.start_time.asc(),
+    )
 
 
 def _generate_booking_id() -> str:
