@@ -15,17 +15,17 @@ from app.models.patient_organization import PatientOrganization
 from app.models.report import Report
 
 
-def _build_appointment_brief(appt: Appointment, doctor: Doctor, org: Organization) -> dict:
+def _build_appointment_brief(appt: Appointment, doctor: Doctor, org: Organization | None) -> dict:
     return {
         "id": appt.id,
         "doctor_id": appt.doctor_id,
         "doctor_name": doctor.name,
         "doctor_specialty": doctor.specialization,
         "doctor_photo_url": doctor.photo_url,
-        "organization_name": org.name,
-        "hospital_address": org.address,
-        "hospital_city": org.city,
-        "hospital_state": org.state,
+        "organization_name": org.name if org else None,
+        "hospital_address": org.address if org else None,
+        "hospital_city": org.city if org else None,
+        "hospital_state": org.state if org else None,
         "appointment_date": appt.appointment_date,
         "start_time": appt.start_time,
         "end_time": appt.end_time,
@@ -61,7 +61,9 @@ async def get_patient_dashboard(db: AsyncSession, patient_id: UUID) -> dict:
     appt_result = await db.execute(
         select(Appointment, Doctor, Organization)
         .join(Doctor, Doctor.id == Appointment.doctor_id)
-        .join(Organization, Organization.id == Appointment.organization_id)
+        # FIX 2026-04-24: Was INNER JOIN which silently dropped rows where
+        # organization_id IS NULL (independent doctor bookings after commit ce0d7c0).
+        .outerjoin(Organization, Organization.id == Appointment.organization_id)
         .where(Appointment.patient_id == patient_id)
         .where(Appointment.appointment_date >= today)
         .where(Appointment.status.not_in(["cancelled", "completed"]))
@@ -207,7 +209,9 @@ async def get_patient_appointments(
     base = (
         select(Appointment, Doctor, Organization)
         .join(Doctor, Doctor.id == Appointment.doctor_id)
-        .join(Organization, Organization.id == Appointment.organization_id)
+        # FIX 2026-04-24: Was INNER JOIN which silently dropped rows where
+        # organization_id IS NULL (independent doctor bookings after commit ce0d7c0).
+        .outerjoin(Organization, Organization.id == Appointment.organization_id)
         .where(Appointment.patient_id == patient_id)
         .where(Appointment.is_active == True)
     )
@@ -257,7 +261,9 @@ async def reschedule_patient_appointment(
     result = await db.execute(
         select(Appointment, Doctor, Organization)
         .join(Doctor, Doctor.id == Appointment.doctor_id)
-        .join(Organization, Organization.id == Appointment.organization_id)
+        # FIX 2026-04-24: Was INNER JOIN which silently dropped rows where
+        # organization_id IS NULL (independent doctor bookings after commit ce0d7c0).
+        .outerjoin(Organization, Organization.id == Appointment.organization_id)
         .where(Appointment.id == appointment_id)
         .where(Appointment.patient_id == patient_id)
         .where(Appointment.is_active == True)
@@ -353,9 +359,9 @@ async def reschedule_patient_appointment(
         "booking_id": appointment.booking_id,
         "doctor_name": doctor.name,
         "doctor_specialty": doctor.specialization,
-        "organization_name": org.name,
-        "hospital_city": org.city,
-        "hospital_state": org.state,
+        "organization_name": org.name if org else None,
+        "hospital_city": org.city if org else None,
+        "hospital_state": org.state if org else None,
         "appointment_date": appointment.appointment_date,
         "start_time": appointment.start_time,
         "end_time": appointment.end_time,

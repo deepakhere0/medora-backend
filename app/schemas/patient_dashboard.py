@@ -51,7 +51,7 @@ class PatientAppointmentBrief(BaseModel):
     doctor_name: str
     doctor_specialty: str | None
     doctor_photo_url: str | None
-    organization_name: str
+    organization_name: str | None
     hospital_address: str | None
     hospital_city: str | None
     hospital_state: str | None
@@ -81,7 +81,7 @@ class RescheduleResponse(BaseModel):
     booking_id: str | None
     doctor_name: str
     doctor_specialty: str | None
-    organization_name: str
+    organization_name: str | None
     hospital_city: str | None
     hospital_state: str | None
     appointment_date: date
