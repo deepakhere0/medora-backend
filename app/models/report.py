@@ -66,6 +66,15 @@ class Report(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
+    # Patient self-upload fields (nullable for legacy org-admin uploads)
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    upload_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    doctor_name: Mapped[str | None] = mapped_column(Text, nullable=True)
+    file_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    file_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    ai_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ai_analysis_status: Mapped[str | None] = mapped_column(Text, nullable=True, default="pending")
+
     organization: Mapped["Organization"] = relationship(
         "Organization", back_populates="reports", lazy="noload"
     )

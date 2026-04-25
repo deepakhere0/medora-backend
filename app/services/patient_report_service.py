@@ -165,6 +165,63 @@ async def upload_patient_report(
     return report
 
 
+async def upload_patient_report_enhanced(
+    db: AsyncSession,
+    patient_id: UUID,
+    file_url: str,
+    public_url: str,
+    file_type: str,
+    file_size_bytes: int,
+    title: str | None,
+    upload_type: str | None,
+    doctor_name: str | None,
+    notes: str | None,
+) -> Report:
+    """
+    Insert a Report row for a patient self-upload after the file is already in Supabase.
+    Raises on DB failure — caller is responsible for deleting the uploaded file on error.
+    """
+    report = Report(
+        organization_id=None,
+        patient_id=patient_id,
+        appointment_id=None,
+        uploaded_by=None,
+        report_type="other",          # legacy required column; upload_type carries the real value
+        file_url=file_url,            # storage path
+        file_name=f"{upload_type or 'report'}.{file_type.split('/')[-1]}",
+        file_size_kb=max(1, file_size_bytes // 1024),
+        notes=notes,
+        is_active=True,
+        title=title,
+        upload_type=upload_type,
+        doctor_name=doctor_name,
+        file_type=file_type,
+        file_size_bytes=file_size_bytes,
+        ai_analysis=None,
+        ai_analysis_status="pending" if file_type.startswith("image/") else "skipped",
+    )
+    db.add(report)
+    await db.commit()
+    await db.refresh(report)
+    return report
+
+
+async def get_patient_report_by_id(
+    db: AsyncSession,
+    patient_id: UUID,
+    report_id: UUID,
+) -> Report | None:
+    """Fetch a single report owned by this patient, or None if not found / not owned."""
+    result = await db.execute(
+        select(Report).where(
+            Report.id == report_id,
+            Report.patient_id == patient_id,
+            Report.is_active == True,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 async def delete_patient_report(
     db: AsyncSession,
     patient_id: UUID,
