@@ -88,6 +88,7 @@ from app.routers.doctor_auth import router as doctor_auth_router
 from app.routers.doctor_dashboard import router as doctor_dashboard_router
 from app.routers.doctors_public import router as doctors_public_router
 from app.routers.notifications import router as notifications_router
+from app.routers.patient_report_alias import router as patient_report_alias_router
 
 
 def create_app() -> FastAPI:
@@ -148,6 +149,7 @@ def create_app() -> FastAPI:
     app.include_router(patient_auth_router, prefix="/api/v1")
     app.include_router(appointment_router, prefix="/api/v1")
     app.include_router(reports_router, prefix="/api/v1")
+    app.include_router(patient_report_alias_router, prefix="/api/v1/reports", tags=["Patient Reports"])
     app.include_router(dashboard_router, prefix="/api/v1")
     app.include_router(medical_history_router, prefix="/api/v1")
     app.include_router(patient_dashboard_router, prefix="/api/v1")
