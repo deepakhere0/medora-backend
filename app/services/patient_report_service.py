@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from fastapi import HTTPException, UploadFile, status
@@ -9,6 +10,8 @@ from app.core.storage import delete_file, get_signed_url, upload_file
 from app.models.appointment import Appointment
 from app.models.patient_organization import PatientOrganization
 from app.models.report import Report
+
+logger = logging.getLogger(__name__)
 
 
 ALLOWED_CONTENT_TYPES = {
@@ -239,6 +242,23 @@ async def delete_patient_report(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Report not found",
+        )
+
+    # Explicit ownership assertion — defense-in-depth.
+    # The query above already filters by patient_id, so this guard should never
+    # fire in normal operation.  If it does, something bypassed the query filter
+    # and we want a hard failure + audit log rather than silent data exposure.
+    if report.patient_id != patient_id:
+        logger.warning(
+            "ownership_violation action=delete patient_id=%s "
+            "report_id=%s actual_owner=%s",
+            patient_id,
+            report_id,
+            report.patient_id,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete your own reports.",
         )
 
     # Patients may only delete reports they uploaded themselves

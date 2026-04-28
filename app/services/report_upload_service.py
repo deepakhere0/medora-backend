@@ -9,10 +9,12 @@ from app.core.storage import supabase_client
 
 logger = logging.getLogger(__name__)
 
+# ── Allowed types ──────────────────────────────────────────────────────────────
+
 ALLOWED_MIME = {"image/jpeg", "image/png", "application/pdf"}
-IMAGE_MAX_BYTES = 10 * 1024 * 1024   # 10 MB
-PDF_MAX_BYTES   = 20 * 1024 * 1024   # 20 MB
-_EXT_MAP = {"image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf"}
+_EXT_MAP     = {"image/jpeg": "jpg", "image/png": "png", "application/pdf": "pdf"}
+# 5 MB limit applied uniformly across all file types
+MAX_BYTES    = 5 * 1024 * 1024
 
 VALID_UPLOAD_TYPES = {"prescription", "lab_test", "scan", "report", "vaccination"}
 
@@ -29,23 +31,33 @@ async def upload_report_file(
     """
     file_type = (file.content_type or "").split(";")[0].strip()
 
+    # Validate MIME type — do NOT echo the submitted value back to the user
+    # (prevents reflecting an attacker-controlled string in the error body).
     if file_type not in ALLOWED_MIME:
         raise HTTPException(
             status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail="Only JPEG, PNG, and PDF files are allowed",
+            detail=(
+                "Only PDF, JPG, and PNG files are accepted. "
+                "Please convert your file and try again."
+            ),
         )
 
     file_bytes = await file.read()
     size = len(file_bytes)
-    max_bytes = IMAGE_MAX_BYTES if file_type.startswith("image/") else PDF_MAX_BYTES
-    if size > max_bytes:
-        limit_mb = max_bytes // (1024 * 1024)
+
+    if size == 0:
         raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large — maximum {limit_mb} MB for {file_type}",
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The uploaded file is empty.",
         )
 
-    ext = _EXT_MAP[file_type]
+    if size > MAX_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="File is too large. Maximum allowed size is 5 MB.",
+        )
+
+    ext  = _EXT_MAP[file_type]
     path = f"patient-reports/{patient_id}/{uuid.uuid4()}.{ext}"
 
     try:
@@ -55,10 +67,16 @@ async def upload_report_file(
             file_options={"content-type": file_type},
         )
     except Exception as exc:
-        logger.error("Supabase upload failed: %s", exc)
+        # Log only the exception class name and patient_id — never the full
+        # exception message, which may contain storage paths or credentials.
+        logger.error(
+            "supabase_upload_failed patient_id=%s error_type=%s",
+            patient_id,
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="File upload failed",
+            detail="File upload failed. Please try again.",
         )
 
     public_url: str = (
@@ -72,9 +90,13 @@ def delete_uploaded_file(path: str) -> None:
     try:
         supabase_client.storage.from_(settings.SUPABASE_BUCKET).remove([path])
     except Exception as exc:
-        logger.warning("Failed to delete orphaned report file %s: %s", path, exc)
+        # Log only exception type — not the path — to avoid leaking storage layout.
+        logger.warning(
+            "orphaned_file_cleanup_failed error_type=%s",
+            type(exc).__name__,
+        )
 
 
 def get_public_url(storage_path: str) -> str:
-    """Convert a storage path to a public URL. Works for patient-reports/ paths."""
+    """Convert a storage path to a public URL."""
     return supabase_client.storage.from_(settings.SUPABASE_BUCKET).get_public_url(storage_path)

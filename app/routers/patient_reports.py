@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
@@ -27,6 +28,7 @@ from app.services.report_upload_service import (
     upload_report_file,
 )
 
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/patient/reports", tags=["Patient Reports"])
 
@@ -74,6 +76,17 @@ async def upload_report(
 
     storage_path, public_url, file_type, file_size_bytes = await upload_report_file(
         file, current_patient.id
+    )
+
+    # Audit log after a successful upload.
+    # Intentionally omits the original filename — it can contain patient-sensitive
+    # information (e.g. "HIV_result.pdf").  Log only safe metadata.
+    logger.info(
+        "patient_report_upload patient_id=%s file_type=%s upload_type=%s size_kb=%d",
+        current_patient.id,
+        file_type,
+        type,
+        file_size_bytes // 1024,
     )
 
     try:
@@ -152,6 +165,11 @@ async def delete_report(
     db: AsyncSession = Depends(get_db),
     current_patient: Patient = Depends(get_current_patient),
 ) -> dict:
+    logger.info(
+        "patient_report_delete patient_id=%s report_id=%s",
+        current_patient.id,
+        report_id,
+    )
     await delete_patient_report(
         db,
         patient_id=current_patient.id,

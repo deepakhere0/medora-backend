@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from fastapi import Depends, HTTPException, status
@@ -13,6 +14,8 @@ from app.models.organization import Organization
 from app.models.patient import Patient
 from app.models.user import User, UserRole
 
+logger = logging.getLogger(__name__)
+
 bearer_scheme = HTTPBearer()
 
 
@@ -25,8 +28,9 @@ async def get_current_user(
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id: str = payload.get("sub")
         if user_id is None:
-            raise JWTError
-    except JWTError:
+            raise JWTError("missing sub claim")
+    except JWTError as e:
+        logger.warning("auth_user_jwt_error %s", str(e))
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -87,19 +91,25 @@ async def get_current_patient(
         patient_id: str = payload.get("sub")
         role: str = payload.get("role")
         if patient_id is None or role != "patient":
+            logger.warning(
+                "auth_patient_invalid_claims sub=%s role=%s", patient_id, role
+            )
             raise exc
-    except JWTError:
+    except JWTError as e:
+        logger.warning("auth_patient_jwt_error %s", str(e))
         raise exc
 
     try:
         patient_uuid = uuid.UUID(patient_id)
     except ValueError:
+        logger.warning("auth_patient_bad_uuid sub=%s", patient_id)
         raise exc
 
     result = await db.execute(select(Patient).where(Patient.id == patient_uuid))
     patient = result.scalar_one_or_none()
 
     if patient is None or not patient.is_active:
+        logger.warning("auth_patient_not_found_or_inactive patient_id=%s", patient_id)
         raise exc
 
     return patient
@@ -137,14 +147,30 @@ async def get_current_doctor(
     return doctor
 
 
-def require_role(required_role: UserRole):
+def require_role(required_role: "UserRole | list[UserRole]"):
+    """
+    Dependency factory: accepts a single role or a list of allowed roles.
+
+    Usage:
+        Depends(require_role(UserRole.org_admin))
+        Depends(require_role([UserRole.org_admin, UserRole.doctor]))
+    """
+    allowed = required_role if isinstance(required_role, list) else [required_role]
+
     async def dependency(
         current_user: User = Depends(get_current_user),
     ) -> User:
-        if current_user.role != required_role:
+        if current_user.role not in allowed:
+            allowed_names = ", ".join(r.value for r in allowed)
+            logger.warning(
+                "auth_role_denied user_id=%s user_role=%s required=%s",
+                current_user.id,
+                current_user.role,
+                allowed_names,
+            )
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You do not have permission to perform this action",
+                detail=f"Access denied. Required role(s): {allowed_names}",
             )
         return current_user
 
