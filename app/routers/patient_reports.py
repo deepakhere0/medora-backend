@@ -62,7 +62,7 @@ async def upload_report(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     title: str | None = Form(None),
-    type: str = Form(...),
+    type: str = Form("report"),
     doctor_name: str | None = Form(None),
     notes: str | None = Form(None),
     db: AsyncSession = Depends(get_db),
@@ -106,10 +106,21 @@ async def upload_report(
         delete_uploaded_file(storage_path)
         raise
 
+    # ── Background pipeline: OCR (Vision) + AI analysis (Gemini) ─────────────
+    # Run for all supported MIME types:
+    #   Images → full OCR + Gemini Vision analysis
+    #   PDFs   → OCR text extraction only (Gemini image analysis skipped)
     is_image = file_type.startswith("image/")
-    if is_image:
+    run_pipeline = is_image or file_type == "application/pdf"
+
+    if run_pipeline:
         background_tasks.add_task(
             run_ai_analysis_background, report.id, public_url, file_type
+        )
+        logger.info(
+            "report_pipeline_queued report_id=%s file_type=%s",
+            report.id,
+            file_type,
         )
 
     return PatientReportUploadResponse(
@@ -120,7 +131,7 @@ async def upload_report(
         file_url=public_url,
         file_type=file_type,
         file_size_bytes=file_size_bytes,
-        ai_analysis_status=report.ai_analysis_status or "skipped",
+        ai_analysis_status=report.ai_analysis_status or ("pending" if run_pipeline else "skipped"),
         is_report_analysis=is_image,
         created_at=report.created_at,
     )
@@ -156,6 +167,8 @@ async def get_report_detail(
         notes=report.notes,
         report_type=report.report_type,
         created_at=report.created_at,
+        extracted_text=report.extracted_text,
+        clean_text=report.clean_text,
     )
 
 

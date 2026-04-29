@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     GROQ_API_KEY: str = ""
 
     GOOGLE_CLIENT_ID: str = ""
+    # Google Cloud Vision API key — used ONLY by the backend OCR pipeline.
+    # NEVER expose this to the frontend.
+    GOOGLE_CLOUD_VISION_API_KEY: str = ""
 
 
 

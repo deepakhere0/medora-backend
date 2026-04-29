@@ -7,7 +7,7 @@ from typing import Optional
 from groq import Groq
 from google import genai
 from google.genai import types as genai_types
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -313,3 +313,49 @@ async def get_ai_usage(
         "used_today": used,
         "remaining": DAILY_AI_LIMIT - used,
     }
+
+
+@router.post("/transcribe")
+async def transcribe_audio(
+    file: UploadFile = File(...),
+    current_patient: Patient = Depends(get_current_patient),
+):
+    """
+    Transcribe an audio recording using Groq Whisper.
+    Accepts any audio format supported by Whisper (m4a, mp4, webm, wav, mp3, etc.)
+    Returns { "text": "transcribed text" }
+    """
+    import tempfile, os
+
+    SUPPORTED = {".m4a", ".mp4", ".webm", ".wav", ".mp3", ".ogg", ".flac"}
+    ext = os.path.splitext(file.filename or "audio.m4a")[1].lower() or ".m4a"
+    if ext not in SUPPORTED:
+        raise HTTPException(status_code=415, detail=f"Unsupported audio format: {ext}")
+
+    audio_bytes = await file.read()
+    if len(audio_bytes) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Audio file too large (max 25 MB).")
+
+    try:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(audio_bytes)
+            tmp_path = tmp.name
+
+        with open(tmp_path, "rb") as audio_file:
+            transcription = _groq_client.audio.transcriptions.create(
+                file=(os.path.basename(tmp_path), audio_file),
+                model="whisper-large-v3-turbo",
+                response_format="json",
+            )
+
+        os.unlink(tmp_path)
+        return {"text": transcription.text.strip()}
+
+    except HTTPException:
+        raise
+    except Exception as err:
+        traceback.print_exc()
+        print(f"TRANSCRIPTION ERROR: {type(err).__name__}: {err}")
+        raise HTTPException(status_code=500, detail="Transcription failed. Please try again.")
+
+

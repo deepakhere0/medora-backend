@@ -201,7 +201,13 @@ async def upload_patient_report_enhanced(
         file_type=file_type,
         file_size_bytes=file_size_bytes,
         ai_analysis=None,
-        ai_analysis_status="pending" if file_type.startswith("image/") else "skipped",
+        ai_analysis_status=(
+            "pending"
+            if file_type.startswith("image/") or file_type == "application/pdf"
+            else "skipped"
+        ),
+        extracted_text=None,
+        clean_text=None,
     )
     db.add(report)
     await db.commit()

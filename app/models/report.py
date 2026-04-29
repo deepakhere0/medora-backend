@@ -74,6 +74,9 @@ class Report(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     file_size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     ai_analysis: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_analysis_status: Mapped[str | None] = mapped_column(Text, nullable=True, default="pending")
+    # OCR pipeline fields
+    extracted_text: Mapped[str | None] = mapped_column(Text, nullable=True)  # raw Vision API output
+    clean_text: Mapped[str | None] = mapped_column(Text, nullable=True)      # normalised OCR text
 
     organization: Mapped["Organization"] = relationship(
         "Organization", back_populates="reports", lazy="noload"

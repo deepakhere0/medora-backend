@@ -68,3 +68,6 @@ class PatientReportDetailResponse(BaseModel):
     notes:              str | None
     report_type:        str | None
     created_at:         datetime
+    # OCR pipeline fields (populated asynchronously after upload)
+    extracted_text:     str | None = None   # raw Vision API output
+    clean_text:         str | None = None   # normalised OCR text
