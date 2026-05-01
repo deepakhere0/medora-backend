@@ -11,9 +11,12 @@ from app.models.doctor_schedule import DoctorSchedule
 from app.models.notification import Notification
 from app.models.review import Review
 from app.models.online_consultation import OnlineConsultation
+from app.models.consultation_note import ConsultationNote
+from app.models.audit_log import AuditLog
 
 __all__ = [
     "User", "Organization", "Doctor", "Patient", "PatientOrganization",
     "OTPRecord", "Appointment", "Report", "MedicalHistory", "DoctorSchedule",
-    "Notification", "Review", "OnlineConsultation",
+    "Notification", "Review", "OnlineConsultation", "ConsultationNote",
+    "AuditLog",
 ]

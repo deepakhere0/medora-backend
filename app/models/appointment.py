@@ -101,6 +101,8 @@ class Appointment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rejected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     rejection_reason: Mapped[str | None] = mapped_column(String, nullable=True)
+    consultation_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    consultation_ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     token_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     booking_for: Mapped[str] = mapped_column(String, nullable=False, default="self", server_default="self")

@@ -99,6 +99,8 @@ class AppointmentRead(BaseModel):
     cancellation_reason: str | None
     token_number: int | None
     is_active: bool
+    consultation_started_at: datetime | None = None
+    consultation_ended_at: datetime | None = None
     created_at: datetime
     updated_at: datetime
 

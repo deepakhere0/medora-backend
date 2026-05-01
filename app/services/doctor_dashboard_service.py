@@ -18,6 +18,9 @@ from calendar import monthrange
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal
 from uuid import UUID
+import logging
+
+logger = logging.getLogger(__name__)
 
 from fastapi import HTTPException, status
 from sqlalchemy import delete, distinct, func, select
@@ -25,9 +28,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.appointment import Appointment
 from app.models.doctor import Doctor
+from app.models.audit_log import AuditLog
 from app.models.doctor_schedule import DoctorSchedule
 from app.models.online_consultation import OnlineConsultation
 from app.models.patient import Patient
+from app.models.report import Report
 from app.models.review import Review
 from app.models.user import User
 from app.schemas.doctor_dashboard import (
@@ -704,3 +709,248 @@ async def get_doctor_patients(
         "per_page": per_page,
         "total_pages": (total + per_page - 1) // per_page,
     }
+
+async def get_doctor_patient_detail(
+    db: AsyncSession,
+    user: User,
+    patient_id: UUID,
+) -> dict:
+    doctor = await _get_doctor_for_user(db, user)
+
+    # Fetch patient details
+    patient = await db.get(Patient, patient_id)
+    if not patient:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Patient not found")
+
+    # Verify doctor has access
+    appt_base = (
+        select(Appointment)
+        .where(Appointment.doctor_id == doctor.id)
+        .where(Appointment.patient_id == patient_id)
+        .where(Appointment.is_active == True)
+        .order_by(Appointment.appointment_date.desc(), Appointment.start_time.desc())
+    )
+    appointments_result = await db.execute(appt_base)
+    appts = appointments_result.scalars().all()
+
+    if not appts:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No access to this patient")
+
+    appointments_list = [
+        {
+            "id": appt.id,
+            "patient_name": patient.name,
+            "patient_phone": patient.phone,
+            "appointment_date": appt.appointment_date,
+            "start_time": appt.start_time.strftime("%H:%M"),
+            "end_time": appt.end_time.strftime("%H:%M"),
+            "type": "in_clinic",
+            "status": appt.status,
+            "consultation_fee": doctor.consultation_fee,
+            "booking_id": appt.booking_id,
+            "notes": appt.notes,
+        }
+        for appt in appts
+    ]
+
+    reports_base = (
+        select(Report)
+        .where(Report.patient_id == patient_id)
+        .where(Report.is_active == True)
+        .order_by(Report.created_at.desc())
+    )
+    reports_result = await db.execute(reports_base)
+    reports = reports_result.scalars().all()
+
+    from app.services.report_upload_service import get_public_url
+
+    reports_list = [
+        {
+            "id": r.id,
+            "title": r.title or r.file_name,
+            "upload_type": r.upload_type or "report",
+            "file_url": get_public_url(r.file_url) if r.file_url else None,
+            "file_type": r.file_type or "application/pdf",
+            "ai_analysis": r.ai_analysis,
+            "ai_analysis_status": r.ai_analysis_status,
+            "is_report_analysis": bool((r.file_type or "").startswith("image/")),
+            "created_at": r.created_at,
+        }
+        for r in reports
+    ]
+
+    last_visit = next((a.appointment_date for a in appts if a.status == "completed"), None)
+    
+    patient_user = await db.get(User, patient.user_id) if patient.user_id else None
+    
+    # Extract allergies if it exists
+    allergies = None
+    if hasattr(patient, "allergies"):
+        allergies = patient.allergies
+
+    return {
+        "patient_id": patient.id,
+        "patient_name": patient.name,
+        "patient_phone": patient.phone,
+        "date_of_birth": patient.date_of_birth,
+        "gender": patient.gender,
+        "blood_group": patient.blood_group,
+        "allergies": allergies,
+        "avatar_url": patient_user.avatar_url if patient_user else None,
+        "last_visit_date": last_visit,
+        "total_visits": sum(1 for a in appts if a.status == "completed"),
+        "reports": reports_list,
+        "appointments": appointments_list,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Consultation Notes
+# ---------------------------------------------------------------------------
+
+async def upsert_consultation_note(
+    db: AsyncSession,
+    user: User,
+    patient_id: UUID,
+    content: str,
+    client_updated_at: datetime | None = None,
+    client_version: int | None = None,
+) -> dict:
+    """
+    Create or update the doctor's note for a given patient.
+    Uses INSERT … ON CONFLICT DO UPDATE so the caller never
+    needs to worry whether a note already exists.
+    """
+    from app.models.consultation_note import ConsultationNote
+
+    doctor = await _get_doctor_for_user(db, user)
+
+    # Verify the patient has at least one appointment with this doctor
+    access_check = await db.execute(
+        select(Appointment).where(
+            Appointment.doctor_id == doctor.id,
+            Appointment.patient_id == patient_id,
+        ).limit(1)
+    )
+    if access_check.scalar_one_or_none() is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this patient's records.",
+        )
+
+    # Check for existing note
+    result = await db.execute(
+        select(ConsultationNote).where(
+            ConsultationNote.doctor_id == doctor.id,
+            ConsultationNote.patient_id == patient_id,
+        )
+    )
+    note = result.scalar_one_or_none()
+
+    if note is None:
+        note = ConsultationNote(
+            doctor_id=doctor.id,
+            patient_id=patient_id,
+            content=content,
+            version=1
+        )
+        db.add(note)
+    else:
+        # Idempotency check: ignore stale updates based on version
+        if client_version is not None and client_version < note.version:
+            logger.info(f"AUDIT: Ignoring stale note update for Patient {patient_id}. Client version {client_version} < Server {note.version}")
+            return {
+                "id": note.id,
+                "doctor_id": note.doctor_id,
+                "patient_id": note.patient_id,
+                "content": note.content,
+                "version": note.version,
+                "created_at": note.created_at,
+                "updated_at": note.updated_at,
+            }
+        
+        note.content = content
+        note.version = note.version + 1
+
+    audit = AuditLog(
+        doctor_id=doctor.id,
+        patient_id=patient_id,
+        action="note_update"
+    )
+    db.add(audit)
+
+    await db.commit()
+    await db.refresh(note)
+
+    logger.info(f"AUDIT: Consultation notes updated for Patient {patient_id} by Doctor {doctor.id}")
+
+    return {
+        "id": note.id,
+        "doctor_id": note.doctor_id,
+        "patient_id": note.patient_id,
+        "content": note.content,
+        "version": note.version,
+        "created_at": note.created_at,
+        "updated_at": note.updated_at,
+    }
+
+
+async def get_consultation_note(
+    db: AsyncSession,
+    user: User,
+    patient_id: UUID,
+) -> dict | None:
+    """Return the doctor's note for a patient, or None if not yet created."""
+    from app.models.consultation_note import ConsultationNote
+
+    doctor = await _get_doctor_for_user(db, user)
+
+    result = await db.execute(
+        select(ConsultationNote).where(
+            ConsultationNote.doctor_id == doctor.id,
+            ConsultationNote.patient_id == patient_id,
+        )
+    )
+    note = result.scalar_one_or_none()
+    if note is None:
+        return None
+
+    return {
+        "id": note.id,
+        "doctor_id": note.doctor_id,
+        "patient_id": note.patient_id,
+        "content": note.content,
+        "version": note.version,
+        "created_at": note.created_at,
+        "updated_at": note.updated_at,
+    }
+
+async def get_audit_logs(
+    db: AsyncSession,
+    user: User,
+    patient_id: UUID | None = None,
+    limit: int = 50,
+) -> list[dict]:
+    """Return recent audit logs for a doctor, optionally filtered by patient."""
+    doctor = await _get_doctor_for_user(db, user)
+
+    stmt = select(AuditLog).where(AuditLog.doctor_id == doctor.id)
+    if patient_id:
+        stmt = stmt.where(AuditLog.patient_id == patient_id)
+    
+    stmt = stmt.order_by(AuditLog.created_at.desc()).limit(limit)
+    
+    result = await db.execute(stmt)
+    logs = result.scalars().all()
+
+    return [
+        {
+            "id": log.id,
+            "doctor_id": log.doctor_id,
+            "patient_id": log.patient_id,
+            "appointment_id": log.appointment_id,
+            "action": log.action,
+            "created_at": log.created_at,
+        }
+        for log in logs
+    ]

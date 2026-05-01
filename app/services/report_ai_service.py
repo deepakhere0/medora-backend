@@ -31,6 +31,7 @@ import httpx
 
 from app.core.config import settings
 from app.services.vision_service import OCRResult, run_ocr
+from app.utils.ai_wrapper import get_safe_system_prompt
 
 logger = logging.getLogger(__name__)
 
@@ -178,7 +179,7 @@ def _call_gemini_sync(
                 model="gemini-2.0-flash",
                 contents=parts,
                 config=genai_types.GenerateContentConfig(
-                    system_instruction=_REPORT_ANALYSIS_PROMPT,
+                    system_instruction=get_safe_system_prompt(_REPORT_ANALYSIS_PROMPT, mode="report"),
                     max_output_tokens=2000,
                     response_mime_type="application/json",
                 ),

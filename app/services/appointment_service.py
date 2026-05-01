@@ -1,8 +1,11 @@
 import random
 import string
+import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 from fastapi import HTTPException, status
 from sqlalchemy import and_, func, select
@@ -12,6 +15,7 @@ from app.models.appointment import Appointment, AppointmentStatus
 from app.models.doctor import Doctor
 from app.models.notification import Notification
 from app.models.patient import Patient
+from app.models.audit_log import AuditLog
 from app.models.patient_organization import PatientOrganization
 from app.models.user import User
 from app.schemas.appointment import (
@@ -268,9 +272,12 @@ async def update_appointment(
     return appointment
 
 
+# Strict lifecycle: pending → confirmed → in_progress → completed
+# "scheduled" is kept for walk-in appointments created directly as scheduled.
+# Patient-booked appointments arrive as "pending" and doctors confirm → "confirmed".
 _TRANSITIONS: dict[str, list[str]] = {
-    "pending":     ["scheduled", "cancelled", "rejected"],
-    "scheduled":   ["confirmed", "in_progress", "cancelled"],
+    "pending":     ["confirmed", "cancelled", "rejected"],
+    "scheduled":   ["in_progress", "cancelled"],          # walk-in path
     "confirmed":   ["in_progress", "cancelled"],
     "in_progress": ["completed", "cancelled"],
     "completed":   [],
@@ -400,13 +407,15 @@ async def confirm_appointment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
     if appt.doctor_id != doctor.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the assigned doctor can confirm")
+    if appt.status == "confirmed":
+        return appt  # Idempotent success
     if appt.status != "pending":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Cannot confirm appointment in status '{appt.status}'",
         )
 
-    appt.status = "scheduled"
+    appt.status = "confirmed"
     appt.confirmed_at = datetime.now(timezone.utc)
 
     if appt.organization_id is not None:
@@ -447,6 +456,8 @@ async def reject_appointment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
     if appt.doctor_id != doctor.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the assigned doctor can reject")
+    if appt.status == "rejected":
+        return appt  # Idempotent success
     if appt.status != "pending":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -477,6 +488,51 @@ async def reject_appointment(
     return appt
 
 
+async def start_appointment(
+    db: AsyncSession,
+    appointment_id: UUID,
+    current_user: User,
+) -> Appointment:
+    doctor = await _get_doctor_for_user(db, current_user)
+
+    result = await db.execute(
+        select(Appointment).where(
+            Appointment.id == appointment_id,
+            Appointment.is_active.is_(True),
+        )
+    )
+    appt = result.scalar_one_or_none()
+    if appt is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
+    if appt.doctor_id != doctor.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the assigned doctor can start an appointment")
+    if appt.status == "in_progress":
+        return appt  # Idempotent success
+    if appt.status not in ("scheduled", "confirmed"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot start appointment in status '{appt.status}' — must be scheduled or confirmed",
+        )
+
+    appt.status = "in_progress"
+    appt.consultation_started_at = datetime.now(timezone.utc)
+
+    audit = AuditLog(
+        doctor_id=appt.doctor_id,
+        patient_id=appt.patient_id,
+        appointment_id=appt.id,
+        action="start"
+    )
+    db.add(audit)
+
+    await db.commit()
+    await db.refresh(appt)
+
+    logger.info(f"AUDIT: Consultation started for Appointment {appt.id} by Doctor {appt.doctor_id}")
+
+    return appt
+
+
 async def complete_appointment(
     db: AsyncSession,
     appointment_id: UUID,
@@ -495,15 +551,30 @@ async def complete_appointment(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Appointment not found")
     if appt.doctor_id != doctor.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the assigned doctor can mark complete")
-    if appt.status != "scheduled":
+    if appt.status == "completed":
+        return appt  # Idempotent success
+    if appt.status != "in_progress":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Cannot complete appointment in status '{appt.status}'",
+            detail=f"Cannot complete appointment in status '{appt.status}' — must be in_progress",
         )
 
     appt.status = "completed"
+    appt.consultation_ended_at = datetime.now(timezone.utc)
+
+    audit = AuditLog(
+        doctor_id=appt.doctor_id,
+        patient_id=appt.patient_id,
+        appointment_id=appt.id,
+        action="complete"
+    )
+    db.add(audit)
+
     await db.commit()
     await db.refresh(appt)
+
+    logger.info(f"AUDIT: Consultation completed for Appointment {appt.id} by Doctor {appt.doctor_id}")
+
     return appt
 
 

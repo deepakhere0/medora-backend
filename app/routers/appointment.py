@@ -38,6 +38,7 @@ from app.services.appointment_service import (
     get_doctor_today_appointments,
     list_appointments,
     reject_appointment,
+    start_appointment,
     update_appointment,
     update_appointment_status,
 )
@@ -267,6 +268,19 @@ async def reject_appointment_endpoint(
     current_user: User = Depends(require_role(UserRole.doctor)),
 ) -> AppointmentRead:
     return await reject_appointment(db, appointment_id, current_user, payload)
+
+
+@router.patch(
+    "/{appointment_id}/start",
+    response_model=AppointmentRead,
+    status_code=status.HTTP_200_OK,
+)
+async def start_appointment_endpoint(
+    appointment_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_role(UserRole.doctor)),
+) -> AppointmentRead:
+    return await start_appointment(db, appointment_id, current_user)
 
 
 @router.patch(

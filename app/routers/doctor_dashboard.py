@@ -27,6 +27,10 @@ from app.schemas.doctor_dashboard import (
     ScheduleResponse,
     UpdateScheduleRequest,
     DoctorProfileUpdateRequest,
+    DoctorPatientDetailResponse,
+    UpsertConsultationNoteRequest,
+    ConsultationNoteResponse,
+    AuditLogResponse,
 )
 from app.services.doctor_dashboard_service import (
     get_doctor_appointments,
@@ -37,6 +41,9 @@ from app.services.doctor_dashboard_service import (
     get_doctor_schedule,
     update_doctor_profile,
     update_doctor_schedule,
+    get_doctor_patient_detail,
+    upsert_consultation_note,
+    get_consultation_note,
 )
 from app.services.doctor_auth_service import get_doctor_profile
 
@@ -237,3 +244,72 @@ async def doctor_patients(
 ) -> DoctorPatientsResponse:
     data = await get_doctor_patients(db, current_user, page=page, per_page=per_page)
     return DoctorPatientsResponse(**data)
+
+
+@router.get(
+    "/patients/{patient_id}",
+    response_model=DoctorPatientDetailResponse,
+    summary="Get patient details for doctor",
+    description="Returns patient details, their appointments with this doctor, and their uploaded reports."
+)
+async def doctor_patient_detail(
+    patient_id: UUID,
+    current_user: User = Depends(require_role(UserRole.doctor)),
+    db: AsyncSession = Depends(get_db),
+) -> DoctorPatientDetailResponse:
+    data = await get_doctor_patient_detail(db, current_user, patient_id)
+    return DoctorPatientDetailResponse(**data)
+
+
+from typing import Optional
+
+# ---------------------------------------------------------------------------
+# Consultation Notes & Audit
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/audit",
+    response_model=list[AuditLogResponse],
+    summary="Get recent audit logs for the doctor",
+)
+async def get_doctor_audit_logs(
+    patient_id: Optional[UUID] = None,
+    limit: int = 50,
+    current_user: User = Depends(require_role(UserRole.doctor)),
+    db: AsyncSession = Depends(get_db),
+) -> list[AuditLogResponse]:
+    from app.services.doctor_dashboard_service import get_audit_logs
+    data = await get_audit_logs(db, current_user, patient_id, limit)
+    return [AuditLogResponse(**item) for item in data]
+
+@router.post(
+    "/notes",
+    response_model=ConsultationNoteResponse,
+    summary="Create or update doctor note for a patient",
+    description="Upserts a consultation note for the (doctor, patient) pair. Safe to call repeatedly.",
+)
+async def upsert_note(
+    body: UpsertConsultationNoteRequest,
+    current_user: User = Depends(require_role(UserRole.doctor)),
+    db: AsyncSession = Depends(get_db),
+) -> ConsultationNoteResponse:
+    data = await upsert_consultation_note(
+        db, current_user, body.patient_id, body.content, body.client_updated_at, body.version
+    )
+    return ConsultationNoteResponse(**data)
+
+
+@router.get(
+    "/notes/{patient_id}",
+    response_model=ConsultationNoteResponse | None,
+    summary="Get doctor note for a specific patient",
+)
+async def get_note(
+    patient_id: UUID,
+    current_user: User = Depends(require_role(UserRole.doctor)),
+    db: AsyncSession = Depends(get_db),
+) -> ConsultationNoteResponse | None:
+    data = await get_consultation_note(db, current_user, patient_id)
+    if data is None:
+        return None
+    return ConsultationNoteResponse(**data)

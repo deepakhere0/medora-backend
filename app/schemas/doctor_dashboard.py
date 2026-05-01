@@ -231,3 +231,60 @@ class DoctorPatientsResponse(BaseModel):
     page: int
     per_page: int
     total_pages: int
+
+
+class DoctorPatientReportItem(BaseModel):
+    id: UUID
+    title: str | None
+    upload_type: str | None
+    file_url: str | None
+    file_type: str | None
+    ai_analysis: str | None
+    ai_analysis_status: str | None
+    is_report_analysis: bool
+    created_at: datetime
+
+
+class DoctorPatientDetailResponse(BaseModel):
+    patient_id: UUID
+    patient_name: str
+    patient_phone: str | None
+    date_of_birth: date | None
+    gender: str | None
+    blood_group: str | None
+    allergies: str | None
+    avatar_url: str | None
+    last_visit_date: date | None
+    total_visits: int
+    reports: list[DoctorPatientReportItem]
+    appointments: list[DoctorAppointmentItem]
+
+
+# ---------------------------------------------------------------------------
+# Consultation Notes
+# ---------------------------------------------------------------------------
+
+class UpsertConsultationNoteRequest(BaseModel):
+    """Body for POST /doctor/notes — creates or replaces the note for a (doctor, patient) pair."""
+    patient_id: UUID
+    content: str = Field(default="", max_length=10_000)
+    client_updated_at: datetime | None = None
+    version: int | None = None
+
+
+class ConsultationNoteResponse(BaseModel):
+    id: UUID
+    doctor_id: UUID
+    patient_id: UUID
+    content: str
+    version: int
+    created_at: datetime
+    updated_at: datetime
+
+class AuditLogResponse(BaseModel):
+    id: UUID
+    doctor_id: UUID
+    patient_id: UUID
+    appointment_id: UUID | None
+    action: str
+    created_at: datetime

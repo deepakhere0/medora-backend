@@ -18,6 +18,7 @@ from app.core.dependencies import get_current_patient
 from app.db.session import get_db
 from app.models.doctor import Doctor
 from app.models.patient import Patient
+from app.utils.ai_wrapper import get_safe_system_prompt
 
 router = APIRouter(prefix="/patient/ai", tags=["Patient AI"])
 
@@ -218,7 +219,7 @@ async def symptom_check(
                 model="gemini-2.0-flash",
                 contents=parts,
                 config=genai_types.GenerateContentConfig(
-                    system_instruction=REPORT_ANALYSIS_PROMPT,
+                    system_instruction=get_safe_system_prompt(REPORT_ANALYSIS_PROMPT, mode="report"),
                     max_output_tokens=2000,
                 ),
             )
@@ -240,7 +241,7 @@ async def symptom_check(
             model="gemini-2.0-flash",
             contents=request.message,
             config=genai_types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
+                system_instruction=get_safe_system_prompt(SYSTEM_PROMPT, mode="patient"),
                 max_output_tokens=1500,
             ),
         )
@@ -270,8 +271,14 @@ async def symptom_check(
         fb_response = _groq_client.chat.completions.create(
             model="llama-3.3-70b-versatile",
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": request.message},
+                {
+                    "role": "system",
+                    "content": get_safe_system_prompt(SYSTEM_PROMPT, mode="patient")
+                },
+                {
+                    "role": "user",
+                    "content": request.message
+                }
             ],
             max_tokens=1500,
             temperature=0.7,
