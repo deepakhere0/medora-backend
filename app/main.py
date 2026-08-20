@@ -68,6 +68,11 @@ async def lifespan(app: FastAPI):
     # Log only the DB hostname — never the password or full URL.
     _parsed = urlparse(settings.DIRECT_URL or settings.DATABASE_URL)
     logger.info("Database host: %s", _parsed.hostname)
+    logger.info(
+        "AI models — gemini: %s | groq: %s",
+        settings.GEMINI_TEXT_MODEL,
+        settings.GROQ_TEXT_MODEL,
+    )
 
     # Backfill is best-effort: a slow or unreachable DB must never prevent the
     # app from binding to its port (Render fails deploys on "no open port").

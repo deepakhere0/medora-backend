@@ -1,5 +1,6 @@
 import base64
 import json
+import logging
 import traceback
 from datetime import date
 from typing import Optional
@@ -7,9 +8,11 @@ from typing import Optional
 from groq import Groq
 from google import genai
 from google.genai import types as genai_types
-from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
+from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select, func
 
@@ -216,7 +219,7 @@ async def symptom_check(
                 genai_types.Part.from_text(text=user_text),
             ]
             response = _gemini_client.models.generate_content(
-                model="gemini-2.0-flash",
+                model=settings.GEMINI_VISION_MODEL,
                 contents=parts,
                 config=genai_types.GenerateContentConfig(
                     system_instruction=get_safe_system_prompt(REPORT_ANALYSIS_PROMPT, mode="report"),
@@ -228,17 +231,16 @@ async def symptom_check(
 
         except Exception as img_err:
             traceback.print_exc()
-            print(f"GEMINI VISION ERROR: {type(img_err).__name__}: {img_err}")
-            return {
-                "success": False,
-                "error": "Image analysis is temporarily unavailable. Please try again shortly or describe your symptoms in text.",
-                "remaining_calls": remaining,
-            }
+            logger.error("gemini_vision_error type=%s", type(img_err).__name__)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="AI service temporarily unavailable. Please try again shortly.",
+            )
 
     # --- Primary: Gemini (text-only) ---
     try:
         response = _gemini_client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=settings.GEMINI_TEXT_MODEL,
             contents=request.message,
             config=genai_types.GenerateContentConfig(
                 system_instruction=get_safe_system_prompt(SYSTEM_PROMPT, mode="patient"),
@@ -264,12 +266,12 @@ async def symptom_check(
 
     except Exception as gemini_err:
         traceback.print_exc()
-        print(f"GEMINI ERROR: {type(gemini_err).__name__}: {gemini_err}")
+        logger.error("gemini_text_error type=%s", type(gemini_err).__name__)
 
-    # --- Fallback: Groq (Llama 3) — text-only requests only ---
+    # --- Fallback: Groq (text-only) ---
     try:
         fb_response = _groq_client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model=settings.GROQ_TEXT_MODEL,
             messages=[
                 {
                     "role": "system",
@@ -302,9 +304,12 @@ async def symptom_check(
 
     except Exception as groq_err:
         traceback.print_exc()
-        print(f"GROQ FALLBACK ERROR: {type(groq_err).__name__}: {groq_err}")
+        logger.error("groq_fallback_error type=%s", type(groq_err).__name__)
 
-    return {"success": False, "error": "AI service temporarily unavailable. Please try again later."}
+    raise HTTPException(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        detail="AI service temporarily unavailable. Please try again shortly.",
+    )
 
 
 @router.get("/usage")

@@ -26,6 +26,11 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = ""
     GROQ_API_KEY: str = ""
 
+    # AI model identifiers — override via env vars when models are retired
+    GEMINI_TEXT_MODEL: str = "gemini-3.6-flash"
+    GEMINI_VISION_MODEL: str = "gemini-3.6-flash"
+    GROQ_TEXT_MODEL: str = "openai/gpt-oss-120b"
+
     GOOGLE_CLIENT_ID: str = ""
     # Google Cloud Vision API key — used ONLY by the backend OCR pipeline.
     # NEVER expose this to the frontend.

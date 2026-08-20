@@ -176,7 +176,7 @@ def _call_gemini_sync(
     for attempt in range(max_retries + 1):
         try:
             resp = client.models.generate_content(
-                model="gemini-2.0-flash",
+                model=settings.GEMINI_VISION_MODEL,
                 contents=parts,
                 config=genai_types.GenerateContentConfig(
                     system_instruction=get_safe_system_prompt(_REPORT_ANALYSIS_PROMPT, mode="report"),
