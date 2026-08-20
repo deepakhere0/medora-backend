@@ -2,10 +2,12 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import time
+from urllib.parse import urlparse
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, select
+from fastapi.responses import JSONResponse
+from sqlalchemy import func, select, text
 
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
@@ -63,8 +65,18 @@ async def _backfill_doctor_schedules() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await _backfill_doctor_schedules()
-    # Log all registered routes at startup to help verify registration
+    # Log only the DB hostname — never the password or full URL.
+    _parsed = urlparse(settings.DIRECT_URL or settings.DATABASE_URL)
+    logger.info("Database host: %s", _parsed.hostname)
+
+    # Backfill is best-effort: a slow or unreachable DB must never prevent the
+    # app from binding to its port (Render fails deploys on "no open port").
+    try:
+        await _backfill_doctor_schedules()
+    except Exception as e:
+        logger.error("Startup backfill skipped: %s", e, exc_info=True)
+
+    # Log all registered routes at startup to help verify registration.
     for route in app.routes:
         if hasattr(route, "methods"):
             methods = ",".join(sorted(route.methods))
@@ -107,6 +119,18 @@ def create_app() -> FastAPI:
     @app.get("/health", include_in_schema=False)
     async def root_health_check():
         return {"status": "ok"}
+
+    @app.get("/health/db", include_in_schema=False)
+    async def db_health_check():
+        try:
+            async with AsyncSessionLocal() as session:
+                await session.execute(text("SELECT 1"))
+            return {"status": "ok", "database": "connected"}
+        except Exception as e:
+            return JSONResponse(
+                status_code=503,
+                content={"status": "degraded", "database": "unreachable", "detail": str(e)},
+            )
 
     # ---------------------------------------------------------------------------
     # Middleware
