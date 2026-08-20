@@ -111,6 +111,7 @@ class Appointment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     guest_sex: Mapped[str | None] = mapped_column(String, nullable=True)
     guest_phone: Mapped[str | None] = mapped_column(String, nullable=True)
     guest_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    video_channel: Mapped[str | None] = mapped_column(String, nullable=True)
 
     organization: Mapped["Organization"] = relationship(
         "Organization", back_populates="appointments", lazy="noload"

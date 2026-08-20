@@ -99,6 +99,7 @@ class AppointmentRead(BaseModel):
     cancellation_reason: str | None
     token_number: int | None
     is_active: bool
+    video_channel: str | None = None
     consultation_started_at: datetime | None = None
     consultation_ended_at: datetime | None = None
     created_at: datetime
@@ -131,6 +132,7 @@ class AppointmentListItem(BaseModel):
     # Doctor info
     doctor_name: str | None = None
     doctor_specialization: str | None = None
+    video_channel: str | None = None
     created_at: datetime
 
     @computed_field

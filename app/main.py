@@ -101,11 +101,21 @@ def create_app() -> FastAPI:
     )
 
     # ---------------------------------------------------------------------------
+    # Health check at root — must not be behind any prefix or auth.
+    # Render's health check hits /health; this endpoint never touches the DB.
+    # ---------------------------------------------------------------------------
+    @app.get("/health", include_in_schema=False)
+    async def root_health_check():
+        return {"status": "ok"}
+
+    # ---------------------------------------------------------------------------
     # Middleware
     # ---------------------------------------------------------------------------
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[
+    _cors_env = os.getenv("CORS_ORIGINS", "").strip()
+    _cors_origins = (
+        [o.strip() for o in _cors_env.split(",") if o.strip()]
+        if _cors_env
+        else [
             "http://localhost:3000",
             "http://localhost:3001",
             "http://localhost:8080",
@@ -122,7 +132,12 @@ def create_app() -> FastAPI:
             "https://medora-frontend.vercel.app",
             "https://medora-web.vercel.app",
             "https://medora.vercel.app",
-        ],
+        ]
+    )
+
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
         allow_origin_regex=r"https?://localhost:\d+",
         allow_credentials=True,
         allow_methods=["*"],

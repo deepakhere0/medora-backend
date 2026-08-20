@@ -415,7 +415,11 @@ async def confirm_appointment(
             detail=f"Cannot confirm appointment in status '{appt.status}'",
         )
 
-    appt.status = "confirmed"
+    if appt.status != "confirmed":
+        appt.status = "confirmed"
+        import uuid as _uuid
+        appt.video_channel = f"vc_{appt.id}_{_uuid.uuid4().hex[:6]}"
+
     appt.confirmed_at = datetime.now(timezone.utc)
 
     if appt.organization_id is not None:
